@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quran-processing-toolkit"
+version = "0.2.0"
+description = "Natural, queryable access to Quranic text and morphology"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "Maysum Panju"}]
+dependencies = []
+
+[project.optional-dependencies]
+fast = ["orjson>=3.10"]
+dev = ["build>=1.2", "pytest>=8", "ruff>=0.12"]
+
+[project.scripts]
+quran-toolkit = "quran_processing_toolkit.cli:main"
+quran-rebuild = "quran_processing_toolkit.build:main"
+
+[tool.setuptools]
+packages = ["quran_processing_toolkit", "quran_processing_toolkit.data"]
+package-dir = {"quran_processing_toolkit.data" = "corpus"}
+
+[tool.setuptools.package-data]
+"quran_processing_toolkit" = ["py.typed"]
+"quran_processing_toolkit.data" = ["*.json", "*.tsv", "*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
