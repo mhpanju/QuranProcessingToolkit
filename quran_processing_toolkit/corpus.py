@@ -259,14 +259,22 @@ class QuranCorpus:
     def chapter(self, number: int) -> Chapter:
         return self.chapters[number]
 
+    get_chapter = chapter
+
     def verse(self, chapter: int, verse: int) -> Verse:
         return self.verses[chapter, verse]
+
+    get_verse = verse
 
     def word(self, chapter: int, verse: int, word: int) -> Word:
         return self.words[chapter, verse, word]
 
+    get_word = word
+
     def token(self, chapter: int, verse: int, word: int, part: int) -> Token:
         return self.tokens[chapter, verse, word, part]
+
+    get_token = token
 
     def index_words(self, field: str) -> dict[Any, tuple[Word, ...]]:
         """Build and cache an inverted word index for a field or property."""
@@ -305,6 +313,22 @@ class QuranCorpus:
             if len(candidate) > len(best):
                 best = candidate
         return best
+
+    def longest_word_sequence_without_letters(
+        self,
+        letters: str,
+        *,
+        representation: str = "auto",
+        cross_verse_boundaries: bool = False,
+        **normalization: Any,
+    ) -> QuerySet[Word]:
+        """Find the longest word run avoiding letters, with ASCII meaning Buckwalter."""
+        return self.longest_word_sequence(
+            lambda word: word.contains_no_letters(
+                letters, representation=representation, **normalization
+            ),
+            cross_verse_boundaries=cross_verse_boundaries,
+        )
 
 
 def load_quran(

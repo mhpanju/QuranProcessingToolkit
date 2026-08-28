@@ -33,51 +33,58 @@ first_segment = quran.tokens[1, 1, 1, 1]
 All semantic indexes are genuinely 1-based. There are no dummy chapter 0, chapter
 115, or juz 31 records. Iterating a collection yields its real objects.
 
-## General queries
+## ASCII-first queries
 
-Collections support `filter`, `exclude`, `where`, `group_by`, `count_by`, `select`,
-`unique`, `sorted_by`, `starts_with`, `ends_with`, `contains`, and `longest_run`.
-Text predicates accept Arabic, transliteration, or translation representations and
-explicit Unicode-normalization options.
+ASCII input to text predicates is automatically interpreted as Buckwalter
+transliteration. Arabic input is still accepted, but an entire program can be written
+without an Arabic keyboard. Common questions have named methods; `where`, `filter`,
+and `group_by` remain available for unusual queries.
 
 ```python
 # Verses ending in nun, ignoring diacritics and Quranic pause marks.
-ending_in_nun = quran.verses.ends_with(
-    "ن", strip_diacritics=True, strip_quranic_marks=True
-)
+ending_in_nun = quran.verses.ends_with("n", strip_diacritics=True)
 
 # Fathah tanween followed by alif, while retaining diacritics.
-ending_in_tanween_alif = quran.verses.ends_with(
-    "ًا", strip_quranic_marks=True
-)
+ending_in_tanween_alif = quran.verses.ends_with("FA")
 
 # Current normalized-corpus tense names are exposed without reinterpretation.
-present_tagged_verbs = quran.verbs.where(tense="PRES")
-forms_by_frequency = present_tagged_verbs.count_by("baab")
+present_tagged_verbs = quran.verbs.with_tense("PRES")
+forms_by_frequency = present_tagged_verbs.most_common_forms()
 
 # First-person plural verbs and roots absent from first-person singular verbs.
-first_plural = quran.verbs.where(person=1, grammatical_number="PLURAL")
-first_singular = quran.verbs.where(person=1, grammatical_number="SINGULAR")
-plural_only_roots = set(first_plural.select("root")) - set(first_singular.select("root"))
+first_plural = quran.verbs.with_person(1).with_number("PLURAL")
+first_singular = quran.verbs.with_person(1).with_number("SINGULAR")
+plural_only_roots = first_plural.roots() - first_singular.roots()
+plural_only_verbs = first_plural.with_any_root(plural_only_roots)
 
-# Three-letter nouns containing at least two selected weak letters.
-weak_letters = {"ا", "و", "ي", "ى", "ی"}
-weak_nouns = quran.nouns.filter(
-    lambda word: word.letter_count(strip_diacritics=True) == 3
-    and word.count_characters(weak_letters, strip_diacritics=True) >= 2
-)
+# Nouns with a three-letter root containing at least two weak letters.
+weak_nouns = quran.nouns.with_root_length(3).with_minimum_root_letter_count("Awy", 2)
 
 # Longest within-verse sequence containing neither mim nor nun.
-longest = quran.longest_word_sequence(
-    lambda word: not word.contains("م") and not word.contains("ن")
-)
+longest = quran.longest_word_sequence_without_letters("mn", strip_diacritics=True)
 ```
+
+Results can be returned or printed in Arabic, Buckwalter, or English. English
+translation is available at verse level.
+
+```python
+verse = quran.get_verse(2, 255)
+print(verse.get_arabic())
+print(verse.get_transliteration())
+print(verse.get_translation())
+
+ending_in_nun.show("arabic", limit=3)
+ending_in_nun.show("buckwalter", limit=3)
+ending_in_nun.show("english", limit=3)
+```
+
+See the runnable, ASCII-only programs in [`examples/`](examples/).
 
 Use `find_words()` for repeated equality queries; it lazily builds an inverted index:
 
 ```python
-from_root_ktb = quran.find_words(root="ktb")
-form_iv_verbs = quran.find_words(baab="IV").filter(lambda word: word.is_verb())
+from_root_ktb = quran.words.with_root("ktb")
+form_iv_verbs = quran.verbs.with_form("IV")
 ```
 
 Raw processed fields remain available on tokens using their original uppercase names:

@@ -19,10 +19,18 @@ from .models import (
     Word,
     WordAddress,
 )
-from .text import QURANIC_PAUSE_MARKS, normalize_arabic
+from .text import (
+    BUCKWALTER_DIACRITICS,
+    QURANIC_PAUSE_MARKS,
+    canonical_representation,
+    infer_representation,
+    normalize_arabic,
+    normalize_buckwalter,
+)
 
 __all__ = [
     "Chapter",
+    "BUCKWALTER_DIACRITICS",
     "CorpusAlignmentError",
     "CorpusError",
     "IndexedCollection",
@@ -39,8 +47,11 @@ __all__ = [
     "Word",
     "WordAddress",
     "default_data_directory",
+    "canonical_representation",
+    "infer_representation",
     "load_quran",
     "normalize_arabic",
+    "normalize_buckwalter",
 ]
 
 __version__ = "0.2.0"

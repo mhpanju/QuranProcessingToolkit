@@ -106,6 +106,10 @@ class Token(TextMixin):
     def form(self) -> str:
         return self._data["FORM"]
 
+    def get_form(self) -> str:
+        """Return this segment's Buckwalter surface form."""
+        return self.form
+
     @property
     def tag(self) -> str:
         return self._data["TAG"]
@@ -268,13 +272,29 @@ class Word(TextMixin):
         """Compatibility alias for the prototype's named-baab method."""
         return self.baab_name
 
+    def get_form(self) -> str | tuple[str, ...] | None:
+        """Return the verb form/baab code, such as ``I`` or ``IV``."""
+        return self.verb_form
+
+    def get_root(self) -> str | tuple[str, ...] | None:
+        return self.root
+
+    def get_lemma(self) -> str | tuple[str, ...] | None:
+        return self.lemma
+
     @property
     def tense(self) -> str | tuple[str, ...] | None:
         return self.value("TENSE")
 
+    def get_tense(self) -> str | tuple[str, ...] | None:
+        return self.tense
+
     @property
     def voice(self) -> str | tuple[str, ...] | None:
         return self.value("VOICE")
+
+    def get_voice(self) -> str | tuple[str, ...] | None:
+        return self.voice
 
     @property
     def conjugation(self) -> int | tuple[int, ...] | None:
@@ -293,15 +313,24 @@ class Word(TextMixin):
         values = tuple(dict.fromkeys(int(label[0]) for label in self.conjugation_labels))
         return values[0] if len(values) == 1 else values or None
 
+    def get_person(self) -> int | tuple[int, ...] | None:
+        return self.person
+
     @property
     def grammatical_number(self) -> str | tuple[str, ...] | None:
         mapping = {"S": "SINGULAR", "D": "DUAL", "P": "PLURAL"}
         values = tuple(dict.fromkeys(mapping[label[-1]] for label in self.conjugation_labels))
         return values[0] if len(values) == 1 else values or None
 
+    def get_number(self) -> str | tuple[str, ...] | None:
+        return self.grammatical_number
+
     @property
     def gender(self) -> str | tuple[str, ...] | None:
         return self.value("GENDER")
+
+    def get_gender(self) -> str | tuple[str, ...] | None:
+        return self.gender
 
 
 class Verse(TextMixin):

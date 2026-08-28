@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Generic, TypeVar, overload
 
@@ -114,6 +114,91 @@ class QuerySet(Generic[T]):
     def count_by(self, field_or_callable: str | Callable[[T], K]) -> dict[K, int]:
         return {key: len(values) for key, values in self.group_by(field_or_callable).items()}
 
+    def most_common(
+        self,
+        field: str,
+        *,
+        limit: int | None = None,
+        include_none: bool = False,
+    ) -> tuple[tuple[Any, int], ...]:
+        """Count and rank values without requiring ``group_by`` knowledge."""
+        counts = self.count_by(field)
+        ranked = sorted(
+            (
+                (value, count)
+                for value, count in counts.items()
+                if include_none or value is not None
+            ),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        return tuple(ranked[:limit])
+
+    # Friendly morphology filters. They intentionally delegate to the generic query
+    # engine so specific and advanced programs compose identically.
+    def with_root(self, root: str) -> QuerySet[T]:
+        return self.where(root=root)
+
+    def with_any_root(self, roots: Iterable[str]) -> QuerySet[T]:
+        wanted = set(roots)
+        return self.filter(lambda item: bool(wanted.intersection(getattr(item, "roots", ()))))
+
+    def with_root_length(self, length: int) -> QuerySet[T]:
+        """Keep words having at least one root of exactly ``length`` letters."""
+        return self.filter(
+            lambda item: any(len(root) == length for root in getattr(item, "roots", ()))
+        )
+
+    def with_minimum_root_letter_count(self, letters: str, count: int) -> QuerySet[T]:
+        """Keep words whose root contains ``count`` selected Buckwalter letters."""
+        wanted = set(letters)
+        return self.filter(
+            lambda item: any(
+                sum(character in wanted for character in root) >= count
+                for root in getattr(item, "roots", ())
+            )
+        )
+
+    def with_lemma(self, lemma: str) -> QuerySet[T]:
+        return self.where(lemma=lemma)
+
+    def with_form(self, form: str) -> QuerySet[T]:
+        return self.where(verb_form=form)
+
+    def with_tense(self, tense: str) -> QuerySet[T]:
+        return self.where(tense=tense)
+
+    def with_voice(self, voice: str) -> QuerySet[T]:
+        return self.where(voice=voice)
+
+    def with_person(self, person: int) -> QuerySet[T]:
+        return self.where(person=person)
+
+    def with_number(self, number: str) -> QuerySet[T]:
+        return self.where(grammatical_number=number)
+
+    def with_gender(self, gender: str) -> QuerySet[T]:
+        return self.where(gender=gender)
+
+    def with_part_of_speech(self, part_of_speech: str) -> QuerySet[T]:
+        return self.where(part_of_speech=part_of_speech)
+
+    def roots(self) -> frozenset[str]:
+        return frozenset(root for item in self for root in getattr(item, "roots", ()))
+
+    def lemmas(self) -> frozenset[str]:
+        return frozenset(lemma for item in self for lemma in getattr(item, "lemmas", ()))
+
+    def forms(self) -> frozenset[str]:
+        return frozenset(form for item in self for form in item.values("VERB_FORM"))
+
+    def most_common_forms(self, limit: int | None = None) -> tuple[tuple[str, int], ...]:
+        """Rank individual verb-form codes, including words with multiple stems."""
+        counts = Counter(
+            form for item in self for form in getattr(item, "values", lambda _: ())("VERB_FORM")
+        )
+        return tuple(counts.most_common(limit))
+
     def sorted_by(
         self,
         field_or_callable: str | Callable[[T], Any],
@@ -123,7 +208,7 @@ class QuerySet(Generic[T]):
         return QuerySet(sorted(self, key=_selector(field_or_callable), reverse=reverse))
 
     def starts_with(
-        self, prefix: str, *, representation: str = "arabic", **normalization: Any
+        self, prefix: str, *, representation: str = "auto", **normalization: Any
     ) -> QuerySet[T]:
         return self.filter(
             lambda item: item.starts_with(  # type: ignore[attr-defined]
@@ -132,7 +217,7 @@ class QuerySet(Generic[T]):
         )
 
     def ends_with(
-        self, suffix: str, *, representation: str = "arabic", **normalization: Any
+        self, suffix: str, *, representation: str = "auto", **normalization: Any
     ) -> QuerySet[T]:
         return self.filter(
             lambda item: item.ends_with(  # type: ignore[attr-defined]
@@ -141,13 +226,102 @@ class QuerySet(Generic[T]):
         )
 
     def contains(
-        self, fragment: str, *, representation: str = "arabic", **normalization: Any
+        self, fragment: str, *, representation: str = "auto", **normalization: Any
     ) -> QuerySet[T]:
         return self.filter(
             lambda item: item.contains(  # type: ignore[attr-defined]
                 fragment, representation=representation, **normalization
             )
         )
+
+    def contains_letter(
+        self, letter: str, *, representation: str = "auto", **normalization: Any
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: item.contains_letter(  # type: ignore[attr-defined]
+                letter, representation=representation, **normalization
+            )
+        )
+
+    def contains_any_letter(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: item.contains_any_letter(  # type: ignore[attr-defined]
+                letters, representation=representation, **normalization
+            )
+        )
+
+    def contains_all_letters(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: item.contains_all_letters(  # type: ignore[attr-defined]
+                letters, representation=representation, **normalization
+            )
+        )
+
+    def without_letters(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: item.contains_no_letters(  # type: ignore[attr-defined]
+                letters, representation=representation, **normalization
+            )
+        )
+
+    def with_letter_count(
+        self,
+        count: int,
+        *,
+        representation: str = "arabic",
+        **normalization: Any,
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: (
+                item.letter_count(  # type: ignore[attr-defined]
+                    representation=representation, **normalization
+                )
+                == count
+            )
+        )
+
+    def with_minimum_character_count(
+        self,
+        characters: str,
+        count: int,
+        *,
+        representation: str = "auto",
+        **normalization: Any,
+    ) -> QuerySet[T]:
+        return self.filter(
+            lambda item: (
+                item.count_characters(  # type: ignore[attr-defined]
+                    characters, representation=representation, **normalization
+                )
+                >= count
+            )
+        )
+
+    def texts(self, representation: str = "arabic") -> tuple[str, ...]:
+        return tuple(
+            item.get_text(representation)  # type: ignore[attr-defined]
+            for item in self
+        )
+
+    def show(
+        self,
+        representation: str = "arabic",
+        *,
+        limit: int | None = None,
+        include_address: bool = True,
+    ) -> None:
+        """Print a result set in Arabic, Buckwalter, or English translation."""
+        items = self._items if limit is None else self._items[:limit]
+        for item in items:
+            text = item.get_text(representation)  # type: ignore[attr-defined]
+            address = getattr(item, "address", None)
+            print(f"{address}\t{text}" if include_address and address else text)
 
     def longest_run(self, predicate: Callable[[T], bool]) -> QuerySet[T]:
         """Return the longest contiguous run satisfying ``predicate``."""

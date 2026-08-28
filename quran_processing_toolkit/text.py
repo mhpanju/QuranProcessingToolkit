@@ -9,6 +9,9 @@ from typing import Any
 
 QURANIC_PAUSE_MARKS = frozenset("ۛۖۗۚۙۘ۩ۜ")
 QURANIC_PAUSE_TRANSLATION = str.maketrans("", "", "".join(QURANIC_PAUSE_MARKS))
+# Extended Buckwalter vowel and recitation marks. Long-vowel letters A, w, and Y/y
+# are deliberately not included.
+BUCKWALTER_DIACRITICS = frozenset("aiuoFNK~`^#@")
 _ARABIC_DIACRITIC_RE = re.compile("[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed]")
 
 
@@ -36,66 +39,145 @@ def normalize_arabic(
     return result
 
 
+def normalize_buckwalter(text: str, *, strip_diacritics: bool = False, **_: Any) -> str:
+    """Normalize Buckwalter while preserving its ASCII letter distinctions."""
+    if strip_diacritics:
+        return "".join(character for character in text if character not in BUCKWALTER_DIACRITICS)
+    return text
+
+
+def canonical_representation(representation: str) -> str:
+    """Accept concise names for the three user-facing text representations."""
+    aliases = {
+        "arabic": "arabic",
+        "transliteration": "transliteration",
+        "buckwalter": "transliteration",
+        "translation": "translation",
+        "english": "translation",
+    }
+    try:
+        return aliases[representation.lower()]
+    except KeyError as error:
+        raise ValueError(
+            f"Unknown representation {representation!r}; choose Arabic, "
+            "transliteration/Buckwalter, or translation/English"
+        ) from error
+
+
+def infer_representation(text: str, representation: str = "auto") -> str:
+    """Treat ASCII input as Buckwalter and non-ASCII input as Arabic."""
+    if representation == "auto":
+        return "transliteration" if text.isascii() else "arabic"
+    return canonical_representation(representation)
+
+
 class TextMixin:
     """General text predicates shared by Quranic model objects."""
 
     def get_text(self, representation: str = "arabic") -> str:
+        representation = canonical_representation(representation)
         candidates = {
             "arabic": "arabic_text",
             "translation": "translation_text",
             "transliteration": "transliteration",
-            "form": "form",
         }
-        try:
-            attribute = candidates[representation]
-        except KeyError as error:
-            raise ValueError(
-                f"Unknown representation {representation!r}; choose from {tuple(candidates)}"
-            ) from error
+        attribute = candidates[representation]
         value = getattr(self, attribute, None)
         if value is None:
             raise ValueError(f"{type(self).__name__} has no {representation} representation")
         return value
 
     def normalized_text(self, representation: str = "arabic", **options: Any) -> str:
+        representation = canonical_representation(representation)
         text = self.get_text(representation)
-        return normalize_arabic(text, **options) if representation == "arabic" else text
+        if representation == "arabic":
+            return normalize_arabic(text, **options)
+        if representation == "transliteration":
+            return normalize_buckwalter(text, **options)
+        return text
+
+    def display(self, representation: str = "arabic") -> str:
+        """Return Arabic, English translation, or Buckwalter for display."""
+        return self.get_text(representation)
+
+    def get_arabic(self) -> str:
+        return self.get_text("arabic")
+
+    def get_transliteration(self) -> str:
+        return self.get_text("transliteration")
+
+    def get_translation(self) -> str:
+        return self.get_text("translation")
+
+    @staticmethod
+    def _normalize_input(text: str, representation: str, options: dict[str, Any]) -> str:
+        if representation == "arabic":
+            return normalize_arabic(text, **options)
+        if representation == "transliteration":
+            return normalize_buckwalter(text, **options)
+        return text
 
     def starts_with(
-        self, prefix: str, *, representation: str = "arabic", **normalization: Any
+        self, prefix: str, *, representation: str = "auto", **normalization: Any
     ) -> bool:
+        representation = infer_representation(prefix, representation)
         text = self.normalized_text(representation, **normalization)
-        expected = (
-            normalize_arabic(prefix, **normalization) if representation == "arabic" else prefix
-        )
+        expected = self._normalize_input(prefix, representation, normalization)
         return text.startswith(expected)
 
-    def ends_with(
-        self, suffix: str, *, representation: str = "arabic", **normalization: Any
-    ) -> bool:
+    def ends_with(self, suffix: str, *, representation: str = "auto", **normalization: Any) -> bool:
+        representation = infer_representation(suffix, representation)
         text = self.normalized_text(representation, **normalization)
-        expected = (
-            normalize_arabic(suffix, **normalization) if representation == "arabic" else suffix
-        )
+        expected = self._normalize_input(suffix, representation, normalization)
         return text.endswith(expected)
 
     def contains(
-        self, fragment: str, *, representation: str = "arabic", **normalization: Any
+        self, fragment: str, *, representation: str = "auto", **normalization: Any
     ) -> bool:
+        representation = infer_representation(fragment, representation)
         text = self.normalized_text(representation, **normalization)
-        expected = (
-            normalize_arabic(fragment, **normalization) if representation == "arabic" else fragment
-        )
+        expected = self._normalize_input(fragment, representation, normalization)
         return expected in text
+
+    def contains_letter(
+        self, letter: str, *, representation: str = "auto", **normalization: Any
+    ) -> bool:
+        """Return whether a letter occurs; ASCII letters mean Buckwalter."""
+        if len(letter) != 1:
+            raise ValueError("contains_letter() expects exactly one character")
+        return self.contains(letter, representation=representation, **normalization)
+
+    def contains_any_letter(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> bool:
+        return any(
+            self.contains_letter(letter, representation=representation, **normalization)
+            for letter in letters
+        )
+
+    def contains_all_letters(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> bool:
+        return all(
+            self.contains_letter(letter, representation=representation, **normalization)
+            for letter in letters
+        )
+
+    def contains_no_letters(
+        self, letters: str, *, representation: str = "auto", **normalization: Any
+    ) -> bool:
+        return not self.contains_any_letter(letters, representation=representation, **normalization)
 
     def count_characters(
         self,
         characters: str | Collection[str],
         *,
-        representation: str = "arabic",
+        representation: str = "auto",
         **normalization: Any,
     ) -> int:
-        wanted = set(characters)
+        sample = characters if isinstance(characters, str) else "".join(characters)
+        representation = infer_representation(sample, representation)
+        wanted = set(self._normalize_input(sample, representation, normalization))
         return sum(
             character in wanted
             for character in self.normalized_text(representation, **normalization)
