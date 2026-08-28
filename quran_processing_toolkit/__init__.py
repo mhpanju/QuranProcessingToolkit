@@ -19,9 +19,15 @@ from .models import (
     Word,
     WordAddress,
 )
+from .source_data import (
+    DataError,
+    DataIntegrityError,
+    DataPackageNotInstalledError,
+)
 from .text import (
     BUCKWALTER_DIACRITICS,
     QURANIC_PAUSE_MARKS,
+    TranslationNotAvailableError,
     canonical_representation,
     infer_representation,
     normalize_arabic,
@@ -33,6 +39,9 @@ __all__ = [
     "BUCKWALTER_DIACRITICS",
     "CorpusAlignmentError",
     "CorpusError",
+    "DataError",
+    "DataIntegrityError",
+    "DataPackageNotInstalledError",
     "IndexedCollection",
     "Juz",
     "OneBasedCollection",
@@ -41,6 +50,7 @@ __all__ = [
     "QuerySet",
     "Token",
     "TokenAddress",
+    "TranslationNotAvailableError",
     "Verse",
     "VerseAddress",
     "VERB_FORM_NAMES",
@@ -54,4 +64,4 @@ __all__ = [
     "normalize_buckwalter",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

@@ -119,6 +119,18 @@ class Token(TextMixin):
         return self._data["TOKEN_ROLE"]
 
     @property
+    def source_features(self) -> tuple[str, ...]:
+        """Return the untouched non-keyed QAC features for this segment."""
+        return tuple(
+            feature for feature in self.source_feature_text.split("|") if ":" not in feature
+        )
+
+    @property
+    def source_feature_text(self) -> str:
+        """Return the complete original QAC feature column."""
+        return self._data["FEATURES"]
+
+    @property
     def part_of_speech(self) -> str | None:
         return self._data.get("POS")
 
@@ -290,6 +302,13 @@ class Word(TextMixin):
         return self.tense
 
     @property
+    def aspect(self) -> str | tuple[str, ...] | None:
+        return self.value("ASPECT")
+
+    def get_aspect(self) -> str | tuple[str, ...] | None:
+        return self.aspect
+
+    @property
     def voice(self) -> str | tuple[str, ...] | None:
         return self.value("VOICE")
 
@@ -362,6 +381,10 @@ class Verse(TextMixin):
     @property
     def transliteration(self) -> str:
         return " ".join(word.transliteration for word in self.words)
+
+    @property
+    def has_translation(self) -> bool:
+        return self.translation_text is not None
 
 
 class Chapter:

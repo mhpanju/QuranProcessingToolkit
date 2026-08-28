@@ -25,6 +25,11 @@ def _selector(field_or_callable: str | Callable[[T], R]) -> Callable[[T], R]:
     return lambda item: resolve_value(item, field_or_callable)
 
 
+def _values(item: Any, field: str) -> tuple[Any, ...]:
+    method = getattr(item, "values", None)
+    return method(field) if method else ()
+
+
 class QuerySet(Generic[T]):
     """An immutable, reusable result set with composable query operations."""
 
@@ -122,7 +127,7 @@ class QuerySet(Generic[T]):
         include_none: bool = False,
     ) -> tuple[tuple[Any, int], ...]:
         """Count and rank values without requiring ``group_by`` knowledge."""
-        counts = self.count_by(field)
+        counts: dict[Any, int] = self.count_by(field)
         ranked = sorted(
             (
                 (value, count)
@@ -166,10 +171,16 @@ class QuerySet(Generic[T]):
         return self.where(verb_form=form)
 
     def with_tense(self, tense: str) -> QuerySet[T]:
-        return self.where(tense=tense)
+        aliases = {"PRES": "PRESENT", "IMPV": "IMPERATIVE"}
+        return self.where(tense=aliases.get(tense, tense))
+
+    def with_aspect(self, aspect: str) -> QuerySet[T]:
+        aliases = {"PERF": "PERFECT", "IMPF": "IMPERFECT", "IMPV": "IMPERATIVE"}
+        return self.where(aspect=aliases.get(aspect, aspect))
 
     def with_voice(self, voice: str) -> QuerySet[T]:
-        return self.where(voice=voice)
+        aliases = {"ACT": "ACTIVE", "PASS": "PASSIVE"}
+        return self.where(voice=aliases.get(voice, voice))
 
     def with_person(self, person: int) -> QuerySet[T]:
         return self.where(person=person)
@@ -190,13 +201,11 @@ class QuerySet(Generic[T]):
         return frozenset(lemma for item in self for lemma in getattr(item, "lemmas", ()))
 
     def forms(self) -> frozenset[str]:
-        return frozenset(form for item in self for form in item.values("VERB_FORM"))
+        return frozenset(form for item in self for form in _values(item, "VERB_FORM"))
 
     def most_common_forms(self, limit: int | None = None) -> tuple[tuple[str, int], ...]:
         """Rank individual verb-form codes, including words with multiple stems."""
-        counts = Counter(
-            form for item in self for form in getattr(item, "values", lambda _: ())("VERB_FORM")
-        )
+        counts = Counter(form for item in self for form in _values(item, "VERB_FORM"))
         return tuple(counts.most_common(limit))
 
     def sorted_by(

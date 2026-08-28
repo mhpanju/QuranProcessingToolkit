@@ -15,6 +15,10 @@ BUCKWALTER_DIACRITICS = frozenset("aiuoFNK~`^#@")
 _ARABIC_DIACRITIC_RE = re.compile("[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed]")
 
 
+class TranslationNotAvailableError(ValueError):
+    """Raised when English output is requested without a translation for an item."""
+
+
 def normalize_arabic(
     text: str,
     *,
@@ -84,6 +88,11 @@ class TextMixin:
         attribute = candidates[representation]
         value = getattr(self, attribute, None)
         if value is None:
+            if representation == "translation":
+                raise TranslationNotAvailableError(
+                    f"{type(self).__name__} has no translation representation; "
+                    "pass translation=... to load_quran()"
+                )
             raise ValueError(f"{type(self).__name__} has no {representation} representation")
         return value
 

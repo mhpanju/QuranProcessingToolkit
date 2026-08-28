@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quran-processing-toolkit-qac-data"
+dynamic = ["version"]
+description = "Verbatim Quranic Arabic Corpus and Tanzil source data for Quran Processing Toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0 AND LicenseRef-Quranic-Arabic-Corpus-Terms AND CC-BY-ND-3.0 AND CC-BY-3.0 AND LicenseRef-Tanzil-Quran-Text-Terms"
+license-files = ["licenses/*.txt"]
+authors = [{name = "Maysum Panju"}]
+keywords = ["quran", "arabic", "corpus", "morphology", "linguistics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+[project.urls]
+Homepage = "https://github.com/mhpanju/QuranProcessingToolkit"
+Repository = "https://github.com/mhpanju/QuranProcessingToolkit"
+Issues = "https://github.com/mhpanju/QuranProcessingToolkit/issues"
+"Quranic Arabic Corpus" = "https://corpus.quran.com/download/"
+"Tanzil Project" = "https://tanzil.net/"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["quran_processing_toolkit_qac_data", "quran_processing_toolkit_qac_data.data"]
+
+[tool.setuptools.dynamic]
+version = {attr = "quran_processing_toolkit_qac_data.__version__"}
+
+[tool.setuptools.package-data]
+quran_processing_toolkit_qac_data = ["data/*.json", "data/*.tsv", "data/*.txt"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from quran_processing_toolkit import QuranCorpus, load_quran
 
@@ -39,6 +40,30 @@ class CorpusTests(unittest.TestCase):
 
     def test_cached_loader_reuses_instance(self) -> None:
         self.assertIs(QuranCorpus.load(), QuranCorpus.load())
+
+    def test_source_annotation_is_retained(self) -> None:
+        token = self.quran.tokens[1, 1, 1, 1]
+        self.assertEqual(token.source_feature_text, "PREFIX|bi+")
+        self.assertEqual(token.source_features, ("PREFIX", "bi+"))
+
+    def test_provenance_exposes_verified_source_hashes(self) -> None:
+        morphology = self.quran.provenance()["sources"]["morphology"]
+        self.assertEqual(morphology["version"], "0.4")
+        self.assertEqual(
+            morphology["sha256"],
+            "a1d12923815341face765083805d2148ed2d9f5cc3f7d6665219d887675d8c46",
+        )
+        self.assertIn("Quranic Arabic Corpus", self.quran.licenses()[0]["source"])
+
+    def test_translation_is_user_supplied(self) -> None:
+        self.assertFalse(self.quran.verses[1, 1].has_translation)
+        translation = Path(__file__).parent / "fixtures" / "translation-sample.txt"
+        translated = load_quran(translation=translation, cache=False)
+        self.assertEqual(
+            translated.verses[1, 1].get_translation(),
+            "Sample English translation for testing.",
+        )
+        self.assertFalse(translated.verses[1, 3].has_translation)
 
 
 if __name__ == "__main__":

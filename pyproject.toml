@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quran-processing-toolkit"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Natural, queryable access to Quranic text and morphology"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,22 +12,46 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "Maysum Panju"}]
 dependencies = []
+keywords = ["quran", "arabic", "corpus", "morphology", "linguistics", "buckwalter"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Linguistic",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/mhpanju/QuranProcessingToolkit"
+Documentation = "https://github.com/mhpanju/QuranProcessingToolkit#readme"
+Repository = "https://github.com/mhpanju/QuranProcessingToolkit"
+Issues = "https://github.com/mhpanju/QuranProcessingToolkit/issues"
 
 [project.optional-dependencies]
 fast = ["orjson>=3.10"]
-dev = ["build>=1.2", "pytest>=8", "ruff>=0.12"]
+data = ["quran-processing-toolkit-qac-data==0.4.0"]
+dev = ["build>=1.2", "mypy>=1.17", "pytest>=8", "ruff>=0.12", "twine>=6"]
 
 [project.scripts]
 quran-toolkit = "quran_processing_toolkit.cli:main"
 quran-rebuild = "quran_processing_toolkit.build:main"
 
 [tool.setuptools]
-packages = ["quran_processing_toolkit", "quran_processing_toolkit.data"]
-package-dir = {"quran_processing_toolkit.data" = "corpus"}
+packages = ["quran_processing_toolkit"]
+
+[tool.setuptools.dynamic]
+version = {attr = "quran_processing_toolkit.__version__"}
 
 [tool.setuptools.package-data]
 "quran_processing_toolkit" = ["py.typed"]
-"quran_processing_toolkit.data" = ["*.json", "*.tsv", "*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

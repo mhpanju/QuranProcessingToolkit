@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 
 from quran_processing_toolkit import (
     QuerySet,
@@ -41,7 +42,7 @@ class QueryTests(unittest.TestCase):
         self.assertGreater(len(automatic), 0)
 
     def test_morphology_queries(self) -> None:
-        present = self.quran.verbs.where(tense="PRES")
+        present = self.quran.verbs.where(tense="PRESENT")
         self.assertGreater(len(present), 0)
         self.assertIn("I", present.count_by("baab"))
         self.assertEqual(present.where(baab="I").first().baab_name, "Thulathy Mujarrad")
@@ -50,7 +51,11 @@ class QueryTests(unittest.TestCase):
 
     def test_named_morphology_helpers(self) -> None:
         present = self.quran.verbs.with_tense("PRES")
-        self.assertEqual(present.all(), self.quran.verbs.where(tense="PRES").all())
+        self.assertEqual(present.all(), self.quran.verbs.where(tense="PRESENT").all())
+        self.assertEqual(present.all(), self.quran.verbs.with_aspect("IMPF").all())
+        self.assertEqual(len(present), 8330)
+        self.assertEqual(len(self.quran.verbs.with_aspect("PERF")), 9150)
+        self.assertEqual(len(self.quran.verbs.with_voice("PASS")), 1140)
         self.assertEqual(present.with_form("I").first().get_form(), "I")
         self.assertEqual(present.most_common_forms()[0][0], "I")
 
@@ -66,12 +71,15 @@ class QueryTests(unittest.TestCase):
     def test_output_representations(self) -> None:
         verse = self.quran.get_verse(1, 1)
         self.assertEqual(verse.get_text("buckwalter"), verse.get_transliteration())
-        self.assertEqual(verse.get_text("english"), verse.get_translation())
         self.assertEqual(verse.get_text("arabic"), verse.get_arabic())
+        with self.assertRaisesRegex(ValueError, "no translation representation"):
+            verse.get_text("english")
 
+        translation = Path(__file__).parent / "fixtures" / "translation-sample.txt"
+        translated = load_quran(translation=translation, cache=False)
         output = StringIO()
         with redirect_stdout(output):
-            self.quran.verses.show("english", limit=2, include_address=False)
+            translated.verses.show("english", limit=2, include_address=False)
         self.assertEqual(len(output.getvalue().splitlines()), 2)
 
     def test_inverted_word_index(self) -> None:

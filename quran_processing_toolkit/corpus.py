@@ -1,8 +1,8 @@
-"""Portable, validated loading and querying of the bundled Quran corpus."""
+"""Portable, validated loading and querying of verbatim Quran source data."""
 
 from __future__ import annotations
 
-import json
+import copy
 import os
 from collections import defaultdict
 from collections.abc import Callable
@@ -20,55 +20,33 @@ from .models import (
     Word,
     WordAddress,
 )
+from .source_data import (
+    DataError,
+    default_data_directory,
+    load_normalized_records,
+)
 from .text import QURANIC_PAUSE_TRANSLATION
 
-_CACHE: dict[Path, QuranCorpus] = {}
+_CACHE: dict[tuple[Any, ...], QuranCorpus] = {}
 _CACHE_LOCK = Lock()
 
+CorpusError = DataError
 
-class CorpusError(RuntimeError):
+
+class CorpusAlignmentError(DataError):
     pass
 
 
-class CorpusAlignmentError(CorpusError):
-    pass
-
-
-def default_data_directory() -> Path:
-    """Find corpus data in an override, installed package, or source checkout."""
-    override = os.environ.get("QURAN_PROCESSING_TOOLKIT_DATA")
-    if override:
-        path = Path(override).expanduser().resolve()
-        if not path.is_dir():
-            raise CorpusError(f"Configured corpus directory does not exist: {path}")
-        return path
-
-    try:
-        from importlib.resources import files
-
-        installed = Path(str(files("quran_processing_toolkit.data")))
-        if (installed / "quran-morphologies.json").is_file():
-            return installed
-    except (ImportError, ModuleNotFoundError, TypeError):
-        pass
-
-    source = Path(__file__).resolve().parents[1] / "corpus"
-    if source.is_dir():
-        return source
-    raise CorpusError(
-        "Could not locate corpus data. Set QURAN_PROCESSING_TOOLKIT_DATA or "
-        "pass data_dir=... to QuranCorpus."
-    )
-
-
-def _load_json(path: Path) -> list[dict[str, Any]]:
-    """Use orjson when available, with a dependency-free fallback."""
-    try:
-        import orjson  # type: ignore[import-not-found]
-    except ImportError:
-        with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
-    return orjson.loads(path.read_bytes())
+def _resolve_translation_path(
+    translation: str | os.PathLike[str] | None,
+) -> Path | None:
+    configured = translation or os.environ.get("QURAN_PROCESSING_TOOLKIT_TRANSLATION")
+    if configured is None:
+        return None
+    path = Path(configured).expanduser().resolve()
+    if not path.is_file():
+        raise CorpusError(f"Configured translation file does not exist: {path}")
+    return path
 
 
 def _read_numbered_text(path: Path, delimiter: str = "|") -> dict[VerseAddress, str]:
@@ -119,6 +97,7 @@ class QuranCorpus:
 
     __slots__ = (
         "data_dir",
+        "translation_path",
         "chapters",
         "verses",
         "words",
@@ -127,12 +106,25 @@ class QuranCorpus:
         "_word_indexes",
         "_verbs",
         "_nouns",
+        "_manifest",
+        "_disk_cache",
+        "_cache_dir",
     )
 
-    def __init__(self, data_dir: str | os.PathLike[str] | None = None) -> None:
+    def __init__(
+        self,
+        data_dir: str | os.PathLike[str] | None = None,
+        *,
+        translation: str | os.PathLike[str] | None = None,
+        disk_cache: bool = True,
+        cache_dir: str | os.PathLike[str] | None = None,
+    ) -> None:
         self.data_dir = (
             Path(data_dir).expanduser().resolve() if data_dir else default_data_directory()
         )
+        self.translation_path = _resolve_translation_path(translation)
+        self._disk_cache = disk_cache
+        self._cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else None
         self._word_indexes: dict[str, dict[Any, tuple[Word, ...]]] = {}
         self._verbs: QuerySet[Word] | None = None
         self._nouns: QuerySet[Word] | None = None
@@ -143,24 +135,47 @@ class QuranCorpus:
         cls,
         data_dir: str | os.PathLike[str] | None = None,
         *,
+        translation: str | os.PathLike[str] | None = None,
         cache: bool = True,
+        disk_cache: bool = True,
+        cache_dir: str | os.PathLike[str] | None = None,
     ) -> QuranCorpus:
         """Load a corpus, reusing the in-process instance by default."""
         path = Path(data_dir).expanduser().resolve() if data_dir else default_data_directory()
+        translation_path = _resolve_translation_path(translation)
+        translation_key: tuple[Any, ...] | None = None
+        if translation_path:
+            stat = translation_path.stat()
+            translation_key = (translation_path, stat.st_size, stat.st_mtime_ns)
+        key = (path, translation_key)
         if not cache:
-            return cls(path)
+            return cls(
+                path,
+                translation=translation_path,
+                disk_cache=disk_cache,
+                cache_dir=cache_dir,
+            )
         with _CACHE_LOCK:
-            corpus = _CACHE.get(path)
+            corpus = _CACHE.get(key)
             if corpus is None:
-                corpus = cls(path)
-                _CACHE[path] = corpus
+                corpus = cls(
+                    path,
+                    translation=translation_path,
+                    disk_cache=disk_cache,
+                    cache_dir=cache_dir,
+                )
+                _CACHE[key] = corpus
             return corpus
 
     def _build(self) -> None:
-        morphology_path = self.data_dir / "quran-morphologies.json"
-        arabic = _read_numbered_text(self.data_dir / "uthmani-numbered.txt")
-        translations = _read_numbered_text(self.data_dir / "translation_qarai.txt")
-        records = _load_json(morphology_path)
+        records, self._manifest = load_normalized_records(
+            self.data_dir,
+            disk_cache=self._disk_cache,
+            cache_dir=self._cache_dir,
+        )
+        sources = self._manifest["sources"]
+        arabic = _read_numbered_text(self.data_dir / sources["arabic_text"]["filename"])
+        translations = _read_numbered_text(self.translation_path) if self.translation_path else {}
 
         token_groups: defaultdict[tuple[int, int, int], list[Token]] = defaultdict(list)
         verse_addresses: defaultdict[tuple[int, int], list[tuple[int, int, int]]] = defaultdict(
@@ -169,12 +184,19 @@ class QuranCorpus:
         all_tokens: list[Token] = []
         last_address: tuple[int, int, int, int] | None = None
         for record in records:
-            address = (record["CHAPTER"], record["VERSE"], record["WORD"], record["WORD_PART"])
-            if last_address is not None and address <= last_address:
-                raise CorpusError(f"Morphology records are not strictly ordered at {address}")
-            last_address = address
+            record_address = (
+                int(record["CHAPTER"]),
+                int(record["VERSE"]),
+                int(record["WORD"]),
+                int(record["WORD_PART"]),
+            )
+            if last_address is not None and record_address <= last_address:
+                raise CorpusError(
+                    f"Morphology records are not strictly ordered at {record_address}"
+                )
+            last_address = record_address
             token = Token(record)
-            word_address = address[:3]
+            word_address = record_address[:3]
             if word_address not in token_groups:
                 verse_addresses[word_address[:2]].append(word_address)
             token_groups[word_address].append(token)
@@ -194,22 +216,22 @@ class QuranCorpus:
                     f"Verse {verse_address} has {len(surface_words)} Arabic words but "
                     f"{len(word_addresses)} morphology words"
                 )
-            for address, surface in zip(word_addresses, surface_words, strict=True):
-                word = Word(WordAddress(*address), token_groups[address], surface)
+            for word_address, surface in zip(word_addresses, surface_words, strict=True):
+                word = Word(WordAddress(*word_address), token_groups[word_address], surface)
                 verse_word_groups[verse_address].append(word)
                 all_words.append(word)
 
         chapter_verse_groups: defaultdict[int, list[Verse]] = defaultdict(list)
         all_verses: list[Verse] = []
-        for address in sorted(verse_word_groups):
-            verse_arabic = _without_non_verse_basmala(address, arabic[address])
+        for verse_address in sorted(verse_word_groups):
+            verse_arabic = _without_non_verse_basmala(verse_address, arabic[verse_address])
             verse = Verse(
-                address,
-                verse_word_groups[address],
+                verse_address,
+                verse_word_groups[verse_address],
                 verse_arabic,
-                translations.get(address),
+                translations.get(verse_address),
             )
-            chapter_verse_groups[address.chapter].append(verse)
+            chapter_verse_groups[verse_address.chapter].append(verse)
             all_verses.append(verse)
 
         all_chapters = [
@@ -226,7 +248,8 @@ class QuranCorpus:
 
     def _build_juzs(self) -> OneBasedCollection[Juz]:
         starts: list[VerseAddress] = []
-        with (self.data_dir / "juzz-breakdown.tsv").open(encoding="utf-8") as handle:
+        filename = self._manifest["sources"]["juz_boundaries"]["filename"]
+        with (self.data_dir / filename).open(encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
                 parts = line.rstrip("\n").split("\t")
                 if len(parts) != 3 or int(parts[0]) != line_number:
@@ -255,6 +278,21 @@ class QuranCorpus:
         if self._nouns is None:
             self._nouns = self.words.filter(Word.is_noun)
         return self._nouns
+
+    def provenance(self) -> dict[str, Any]:
+        """Return source versions, hashes, origins, and license identifiers."""
+        return copy.deepcopy(self._manifest)
+
+    def licenses(self) -> tuple[dict[str, str], ...]:
+        """Summarize the terms attached to each installed source file."""
+        return tuple(
+            {
+                "source": source["title"],
+                "license": source["license"],
+                "url": source.get("official_url", ""),
+            }
+            for source in self._manifest["sources"].values()
+        )
 
     def chapter(self, number: int) -> Chapter:
         return self.chapters[number]
@@ -332,6 +370,17 @@ class QuranCorpus:
 
 
 def load_quran(
-    data_dir: str | os.PathLike[str] | None = None, *, cache: bool = True
+    data_dir: str | os.PathLike[str] | None = None,
+    *,
+    translation: str | os.PathLike[str] | None = None,
+    cache: bool = True,
+    disk_cache: bool = True,
+    cache_dir: str | os.PathLike[str] | None = None,
 ) -> QuranCorpus:
-    return QuranCorpus.load(data_dir, cache=cache)
+    return QuranCorpus.load(
+        data_dir,
+        translation=translation,
+        cache=cache,
+        disk_cache=disk_cache,
+        cache_dir=cache_dir,
+    )

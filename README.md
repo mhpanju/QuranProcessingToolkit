@@ -1,23 +1,31 @@
 # Quran Processing Toolkit
 
-An opinionated, queryable Python edition of the Quranic Arabic Corpus. The toolkit
-preserves Quranic addresses as 1-based values, attaches Uthmani text and an English
-translation to the morphology, and makes linguistic and text-processing questions
-natural to express in Python.
+An ASCII-friendly, queryable Python interface to Quranic text and morphology. The
+toolkit preserves Quranic addresses as 1-based values and makes linguistic and
+text-processing questions natural to express in Python.
 
-The project is currently an early research release. The normalized morphology is a
-modified annotation corpus; see [Data provenance](docs/DATA_PROVENANCE.md) and
-[Proposed corpus changes](docs/PROPOSED_CORPUS_CHANGES.md) before treating its labels
-as upstream Quranic Arabic Corpus labels.
+The project is an early research release. It retains the original Quranic Arabic
+Corpus annotations and constructs a documented convenience model at runtime; it does
+not redistribute a modified corpus.
 
-## Install and load
+## Install
+
+The Apache-2.0 toolkit and the separately licensed source data are separate Python
+distributions:
 
 ```bash
-python -m pip install -e .
+python -m pip install quran-processing-toolkit
+python -m pip install quran-processing-toolkit-qac-data
 ```
 
-The core package has no third-party dependencies. Install `.[fast]` to use `orjson`
-when available. Repeated `load_quran()` calls in one process reuse the loaded corpus.
+The equivalent convenience command is:
+
+```bash
+python -m pip install "quran-processing-toolkit[data]"
+```
+
+The data package contains verbatim Quranic Arabic Corpus v0.4 morphology and Tanzil
+Uthmani text with their complete notices. It does not contain an English translation.
 
 ```python
 from quran_processing_toolkit import load_quran
@@ -31,27 +39,26 @@ first_segment = quran.tokens[1, 1, 1, 1]
 ```
 
 All semantic indexes are genuinely 1-based. There are no dummy chapter 0, chapter
-115, or juz 31 records. Iterating a collection yields its real objects.
+115, or juz 31 records.
 
 ## ASCII-first queries
 
-ASCII input to text predicates is automatically interpreted as Buckwalter
-transliteration. Arabic input is still accepted, but an entire program can be written
-without an Arabic keyboard. Common questions have named methods; `where`, `filter`,
-and `group_by` remain available for unusual queries.
+ASCII text supplied to text predicates is automatically interpreted as Buckwalter.
+Arabic input is also accepted, but an entire program can be written without an Arabic
+keyboard.
 
 ```python
-# Verses ending in nun, ignoring diacritics and Quranic pause marks.
+# Verses ending in nun after removing short-vowel marks.
 ending_in_nun = quran.verses.ends_with("n", strip_diacritics=True)
 
-# Fathah tanween followed by alif, while retaining diacritics.
+# Fathah tanween followed by alif, retaining diacritics.
 ending_in_tanween_alif = quran.verses.ends_with("FA")
 
-# Current normalized-corpus tense names are exposed without reinterpretation.
-present_tagged_verbs = quran.verbs.with_tense("PRES")
-forms_by_frequency = present_tagged_verbs.most_common_forms()
+# Present-tense verbs are source IMPF / derived IMPERFECT records.
+present_verbs = quran.verbs.with_tense("PRESENT")
+forms_by_frequency = present_verbs.most_common_forms()
 
-# First-person plural verbs and roots absent from first-person singular verbs.
+# First-person plural roots absent from first-person singular verbs.
 first_plural = quran.verbs.with_person(1).with_number("PLURAL")
 first_singular = quran.verbs.with_person(1).with_number("SINGULAR")
 plural_only_roots = first_plural.roots() - first_singular.roots()
@@ -64,54 +71,97 @@ weak_nouns = quran.nouns.with_root_length(3).with_minimum_root_letter_count("Awy
 longest = quran.longest_word_sequence_without_letters("mn", strip_diacritics=True)
 ```
 
-Results can be returned or printed in Arabic, Buckwalter, or English. English
-translation is available at verse level.
+Results can be returned or printed in Arabic or Buckwalter:
 
 ```python
 verse = quran.get_verse(2, 255)
 print(verse.get_arabic())
 print(verse.get_transliteration())
-print(verse.get_translation())
 
 ending_in_nun.show("arabic", limit=3)
 ending_in_nun.show("buckwalter", limit=3)
-ending_in_nun.show("english", limit=3)
 ```
 
-See the runnable, ASCII-only programs in [`examples/`](examples/).
+See the runnable programs in the
+[`examples` directory](https://github.com/mhpanju/QuranProcessingToolkit/tree/master/examples).
 
-Use `find_words()` for repeated equality queries; it lazily builds an inverted index:
+## User-supplied translations
+
+No translation is bundled because translation rights differ from those of the code
+and morphology. Supply a numbered UTF-8 file when you have the right to use it:
+
+```text
+1|1|Translation of verse 1:1
+1|2|Translation of verse 1:2
+```
 
 ```python
-from_root_ktb = quran.words.with_root("ktb")
-form_iv_verbs = quran.verbs.with_form("IV")
+quran = load_quran(translation="/path/to/my-translation.txt")
+print(quran.verses[1, 1].get_translation())
+quran.verses.show("english", limit=3)
 ```
 
-Raw processed fields remain available on tokens using their original uppercase names:
+The `QURAN_PROCESSING_TOOLKIT_TRANSLATION` environment variable provides the same
+configuration. Missing verses simply have no translation; requesting one raises a
+clear error.
+
+## Source annotations and derived fields
+
+The original QAC feature column remains available on every token:
 
 ```python
 token = quran.tokens[2, 255, 1, 1]
-print(token.FORM, token.TAG, token.get("CASE"))
+print(token.source_feature_text)
+print(token.source_features)
 ```
+
+Convenience fields are derived without modifying the source file:
+
+```python
+perfect = quran.verbs.with_aspect("PERFECT")
+imperfect = quran.verbs.with_aspect("IMPERFECT")
+passive = quran.verbs.with_voice("PASSIVE")
+```
+
+Short source aliases such as `PERF`, `IMPF`, `ACT`, and `PASS` are also accepted by
+the named methods.
+
+## Provenance, verification, and caching
+
+Every source file is checked against the data distribution's byte size and SHA-256
+before use. The transformation has its own version and expected complete-output
+digest.
+
+```python
+print(quran.provenance())
+print(quran.licenses())
+```
+
+The first load in a new environment parses the verbatim source and writes derived JSON
+to the user's cache directory. The cache key includes the transformation version and
+source hash. The source package is never changed, and read-only environments fall back
+to uncached loading. Set `QURAN_PROCESSING_TOOLKIT_CACHE` to choose another cache
+directory or call `load_quran(disk_cache=False)` to disable it.
 
 ## Commands
 
 ```bash
 quran-toolkit stats
+quran-toolkit sources
 quran-toolkit word 2:255:1
 quran-toolkit validate
 quran-rebuild --check
-python verses_per_juzz.py
 ```
 
-`quran-rebuild --check` reconstructs all 128,219 processed records from
-`quran-morphologies_base.json` and compares them with the checked-in normalized
-corpus. The resulting JSON is byte-for-byte identical. Writing requires an explicit
-`--output` path, so validation cannot overwrite the corpus accidentally.
+`quran-rebuild --check` verifies the verbatim source hash, derives all 128,219 records,
+and compares their canonical digest. `--output /some/path.json` may be used to write a
+local derived representation; it never overwrites source data.
 
 ## Development
 
 ```bash
+python -m pip install -e packages/quran_processing_toolkit_qac_data
+python -m pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 python -m quran_processing_toolkit.build --check
 python -m quran_processing_toolkit validate
@@ -120,8 +170,9 @@ python -m quran_processing_toolkit validate
 The historical `from tools import QuranCorpus` import continues to work, but new code
 should import `quran_processing_toolkit`.
 
-## License
+## Licensing
 
-The Python code is released under Apache-2.0. Bundled source texts, translations, and
-linguistic annotations retain their own upstream terms; the top-level Apache license
-does not relicense them. See [Data provenance](docs/DATA_PROVENANCE.md).
+The core Python distribution is Apache-2.0. The separate source-data distribution is
+not Apache-2.0 and includes complete upstream notices. See
+[`DATA_PROVENANCE.md`](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md)
+for the file-level breakdown.

@@ -1,0 +1,3 @@
+# Preserve licensed source artifacts byte-for-byte, including their line endings.
+packages/quran_processing_toolkit_qac_data/src/quran_processing_toolkit_qac_data/data/quranic-corpus-morphology-0.4.txt -text
+packages/quran_processing_toolkit_qac_data/src/quran_processing_toolkit_qac_data/data/uthmani-numbered.txt -text

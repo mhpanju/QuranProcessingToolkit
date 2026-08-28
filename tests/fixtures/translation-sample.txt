@@ -1,0 +1,2 @@
+1|1|Sample English translation for testing.
+1|2|Second sample English translation.

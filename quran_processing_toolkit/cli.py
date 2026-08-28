@@ -12,8 +12,10 @@ from .validation import validate_corpus
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="quran-toolkit")
     parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--translation", type=Path, help="User-supplied numbered translation")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("stats", help="Show corpus object counts")
+    commands.add_parser("sources", help="Show source provenance and licenses")
     commands.add_parser("validate", help="Validate structure and reproducibility")
     word_parser = commands.add_parser("word", help="Inspect a word at chapter:verse:word")
     word_parser.add_argument("address")
@@ -28,10 +30,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{issue.severity.upper()} [{issue.code}] {issue.message}")
         return int(any(issue.severity == "error" for issue in issues))
 
-    corpus = QuranCorpus.load(arguments.data_dir)
+    corpus = QuranCorpus.load(arguments.data_dir, translation=arguments.translation)
     if arguments.command == "stats":
         for label in ("chapters", "verses", "words", "tokens", "juzs"):
             print(f"{label}: {len(getattr(corpus, label)):,}")
+        return 0
+    if arguments.command == "sources":
+        for source in corpus.provenance()["sources"].values():
+            print(f"{source['title']} {source.get('version', '')}".rstrip())
+            print(f"  SHA-256: {source['sha256']}")
+            print(f"  license: {source['license']}")
+            if source.get("official_url"):
+                print(f"  source: {source['official_url']}")
         return 0
     try:
         chapter, verse, word = map(int, arguments.address.strip("()").split(":"))

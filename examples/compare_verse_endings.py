@@ -13,5 +13,5 @@ print("Ending in fathah tanween plus alif:", len(ending_in_tanween_alif))
 print("\nExamples in Arabic:")
 ending_in_nun.show("arabic", limit=3)
 
-print("\nExamples in English:")
-ending_in_tanween_alif.show("english", limit=3)
+print("\nExamples in Buckwalter:")
+ending_in_tanween_alif.show("buckwalter", limit=3)

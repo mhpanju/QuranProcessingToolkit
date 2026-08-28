@@ -1,8 +1,9 @@
-"""Deterministically rebuild the current processed morphology from its base."""
+"""Parse verbatim QAC data and deterministically derive the toolkit representation."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import tempfile
@@ -10,7 +11,12 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from .corpus import default_data_directory
+TRANSFORMATION_VERSION = 2
+SUPPORTED_DERIVED_DIGESTS = {
+    "a1d12923815341face765083805d2148ed2d9f5cc3f7d6665219d887675d8c46": (
+        "01505a13b870567b38bc510cf7ab185072f4f70c473f68b02088c9602826ca79"
+    )
+}
 
 CONJUGATION = {
     "3MS": 1,
@@ -47,11 +53,12 @@ COUNT = {
     "FD": "DUAL",
     "FS": "SINGULAR",
 }
-TOKEN_ROLE = {"PREFIX": "PREFIX", "SUFFIX": "SUFFIX", "STEM": "STEM", "sSTEM": "STEM"}
+TOKEN_ROLE = {"PREFIX": "PREFIX", "SUFFIX": "SUFFIX", "STEM": "STEM"}
+ASPECT = {"PERF": "PERFECT", "IMPF": "IMPERFECT", "IMPV": "IMPERATIVE"}
+TENSE = {"PERF": "PAST", "IMPF": "PRESENT", "IMPV": "IMPERATIVE"}
 
-# Historical, coordinate-specific interpretation of otherwise ambiguous 2D labels.
-# These reproduce the existing processed corpus; they are documented for review rather
-# than silently presented as general rules.
+# Historical coordinate-specific interpretations of the source's ambiguous 2D label.
+# These are an explicit toolkit overlay; the untouched source feature remains available.
 CONJUGATION_OVERRIDES = {
     (4, 171, 4, 1): 9,
     (5, 77, 5, 1): 9,
@@ -61,10 +68,55 @@ CONJUGATION_OVERRIDES = {
 }
 
 
+class SourceFormatError(ValueError):
+    """Raised when a supposedly verbatim QAC source file is malformed."""
+
+
+def parse_source_record(line: str, line_number: int) -> dict[str, Any]:
+    """Parse one tab-separated QAC v0.4 record without changing its source values."""
+    try:
+        location, form, tag, feature_text = line.split("\t")
+        chapter, verse, word, part = map(int, location.strip("()").split(":"))
+    except ValueError as error:
+        raise SourceFormatError(f"Malformed morphology record on line {line_number}") from error
+
+    record: dict[str, Any] = {
+        "CHAPTER": chapter,
+        "VERSE": verse,
+        "WORD": word,
+        "WORD_PART": part,
+        "TAG": tag,
+        "FORM": form,
+        "FEATURES": feature_text,
+    }
+    features: list[str] = []
+    for feature in feature_text.split("|"):
+        if ":" in feature:
+            key, value = feature.split(":", 1)
+            record[key] = value
+        else:
+            features.append(feature)
+    record["SOURCE_FEATURES"] = features
+    return record
+
+
+def load_source_records(path: Path) -> list[dict[str, Any]]:
+    """Load every annotation record from a verbatim QAC v0.4 text file."""
+    records: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8", newline="") as handle:
+        for line_number, raw_line in enumerate(handle, 1):
+            line = raw_line.rstrip("\r\n")
+            if line.startswith("("):
+                records.append(parse_source_record(line, line_number))
+    if not records:
+        raise SourceFormatError(f"No morphology records found in {path}")
+    return records
+
+
 def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
-    """Apply the exact historical normalization used by the checked-in corpus."""
-    result = {key: value for key, value in record.items() if key != "features"}
-    features: list[str] = record["features"]
+    """Construct one derived record while retaining the original annotation fields."""
+    result = {key: value for key, value in record.items() if key != "SOURCE_FEATURES"}
+    features: list[str] = record["SOURCE_FEATURES"]
     address = (record["CHAPTER"], record["VERSE"], record["WORD"], record["WORD_PART"])
 
     verb_form = next(
@@ -88,6 +140,7 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
             break
     if address in CONJUGATION_OVERRIDES:
         result["CONJUGATE"] = CONJUGATION_OVERRIDES[address]
+
     for case in ("GEN", "NOM", "ACC"):
         if case in features:
             result["CASE"] = case
@@ -96,7 +149,7 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
         result["CASE"] = "ACC"
     elif record.get("MOOD") == "JUS":
         result["CASE"] = "JUS"
-    elif "IMPF" in features:
+    elif "IMPF" in features and "CASE" not in result:
         result["CASE"] = "NOM"
     elif "IMPV" in features:
         result["CASE"] = "MABNI"
@@ -108,17 +161,14 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     if "3D" in features:
         result["PRON"] = "3D"
 
-    # Names intentionally reproduce the current modified corpus exactly. Potential
-    # terminology changes are tracked separately and require corpus-owner approval.
-    if "IMPF" in features:
-        result["TENSE"] = "PAST"
-    elif "PERF" in features:
-        result["TENSE"] = "PRES"
-    elif "IMPV" in features:
-        result["TENSE"] = "IMPV"
+    for source_value, aspect in ASPECT.items():
+        if source_value in features:
+            result["ASPECT"] = aspect
+            result["TENSE"] = TENSE[source_value]
+            break
 
     if record.get("POS") == "V":
-        result["VOICE"] = "ACTIVE"
+        result["VOICE"] = "PASSIVE" if "PASS" in features else "ACTIVE"
 
     for feature in features:
         if feature in GENDER:
@@ -134,7 +184,7 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
         elif "PASS" in features:
             result["DERIVED_NOUN"] = "VERB_OBJECT"
     if "VN" in features:
-        result["DERIVED_NOUN"] = "VERB_OBJECT"
+        result["DERIVED_NOUN"] = "VERBAL_NOUN"
     if "INDEF" in features:
         result["DEFINITENESS"] = "INDEFINITE"
     if "P" in features:
@@ -143,47 +193,28 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def rebuild_records(base_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [normalize_record(record) for record in base_records]
+def rebuild_records(source_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [normalize_record(record) for record in source_records]
 
 
-def load_records(path: Path) -> list[dict[str, Any]]:
-    with path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+def canonical_records_bytes(records: list[dict[str, Any]]) -> bytes:
+    """Return the stable byte representation used for cache and reproducibility checks."""
+    return json.dumps(records, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def compare_records(generated: list[dict[str, Any]], expected: list[dict[str, Any]]) -> list[str]:
-    problems: list[str] = []
-    if len(generated) != len(expected):
-        problems.append(
-            f"record count differs: generated={len(generated)}, expected={len(expected)}"
-        )
-    for index, (actual, wanted) in enumerate(zip(generated, expected, strict=False)):
-        if actual != wanted or tuple(actual) != tuple(wanted):
-            address = tuple(
-                actual.get(field) for field in ("CHAPTER", "VERSE", "WORD", "WORD_PART")
-            )
-            differing = sorted(
-                key for key in actual.keys() | wanted.keys() if actual.get(key) != wanted.get(key)
-            )
-            if not differing:
-                differing = ["field order"]
-            problems.append(f"record {index} {address} differs in {differing}")
-            if len(problems) >= 20:
-                problems.append("additional differences omitted")
-                break
-    return problems
+def records_digest(records: list[dict[str, Any]]) -> str:
+    return hashlib.sha256(canonical_records_bytes(records)).hexdigest()
 
 
 def write_records(records: list[dict[str, Any]], output: Path) -> None:
-    """Atomically write normalized records without risking a partial corpus file."""
+    """Atomically write derived records without touching the source data."""
     output.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=output.name + ".", suffix=".tmp", dir=output.parent
     )
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(records, handle, indent=1)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(canonical_records_bytes(records))
         os.replace(temporary_name, output)
     except BaseException:
         with suppress(FileNotFoundError):
@@ -192,26 +223,36 @@ def write_records(records: list[dict[str, Any]], output: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .source_data import default_data_directory, verify_data_directory
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", type=Path, default=default_data_directory())
-    parser.add_argument("--output", type=Path, help="Write rebuilt JSON to this explicit path")
-    parser.add_argument("--check", action="store_true", help="Compare with quran-morphologies.json")
+    parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--output", type=Path, help="Write derived JSON to this explicit path")
+    parser.add_argument("--check", action="store_true", help="Verify source and derived records")
     arguments = parser.parse_args(argv)
-    base = load_records(arguments.data_dir / "quran-morphologies_base.json")
-    generated = rebuild_records(base)
-    if arguments.check:
-        expected = load_records(arguments.data_dir / "quran-morphologies.json")
-        problems = compare_records(generated, expected)
-        if problems:
-            print("Rebuild differs from the checked-in corpus:")
-            print("\n".join(f"- {problem}" for problem in problems))
-            return 1
-        print(f"Exact record match: {len(generated):,} records")
-    if arguments.output:
-        write_records(generated, arguments.output)
-        print(f"Wrote {len(generated):,} records to {arguments.output}")
     if not arguments.check and not arguments.output:
         parser.error("choose --check and/or --output")
+
+    data_dir = arguments.data_dir or default_data_directory()
+    manifest = verify_data_directory(data_dir)
+    source = manifest["sources"]["morphology"]
+    records = rebuild_records(load_source_records(data_dir / source["filename"]))
+    if len(records) != source["records"]:
+        print(f"Derived record count differs: {len(records):,} != {source['records']:,}")
+        return 1
+    digest = records_digest(records)
+    if arguments.check:
+        expected = SUPPORTED_DERIVED_DIGESTS.get(source["sha256"])
+        if expected is None or digest != expected:
+            print(f"Derived digest mismatch: {digest} != {expected or 'unsupported source'}")
+            return 1
+        print(
+            f"Verified source {source['sha256']} and deterministically derived "
+            f"{len(records):,} records ({digest})"
+        )
+    if arguments.output:
+        write_records(records, arguments.output)
+        print(f"Wrote {len(records):,} locally derived records to {arguments.output}")
     return 0
 
 
