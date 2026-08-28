@@ -1,0 +1,22 @@
+name: Publish source-data package
+
+on:
+  push:
+    tags: ["data-v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build packages/quran_processing_toolkit_qac_data --outdir packages/quran_processing_toolkit_qac_data/dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/quran_processing_toolkit_qac_data/dist/

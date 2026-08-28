@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "distribution": "quran-processing-toolkit-qac-data",
+  "distribution_version": "0.4.0",
+  "sources": {
+    "morphology": {
+      "filename": "quranic-corpus-morphology-0.4.txt",
+      "title": "Quranic Arabic Corpus morphology",
+      "version": "0.4",
+      "copyright": "Copyright (C) 2011 Kais Dukes",
+      "license": "LicenseRef-Quranic-Arabic-Corpus-Terms AND CC-BY-ND-3.0",
+      "official_url": "https://corpus.quran.com/download/",
+      "retrieval_urls": [
+        "https://raw.githubusercontent.com/bnjasim/quranic-corpus/master/quranic-corpus-morphology-0.4.txt",
+        "https://raw.githubusercontent.com/cltk/arabic_morphology_quranic-corpus/master/quranic-corpus-morphology-0.4.txt"
+      ],
+      "verification": "The two independently hosted artifacts were byte-for-byte identical.",
+      "sha256": "a1d12923815341face765083805d2148ed2d9f5cc3f7d6665219d887675d8c46",
+      "bytes": 6309503,
+      "records": 128219
+    },
+    "arabic_text": {
+      "filename": "uthmani-numbered.txt",
+      "title": "Tanzil Quran Text (Uthmani)",
+      "version": "1.1",
+      "copyright": "Copyright (C) 2007-2024 Tanzil Project",
+      "license": "CC-BY-3.0 AND LicenseRef-Tanzil-Quran-Text-Terms",
+      "official_url": "https://tanzil.net/download/",
+      "sha256": "7919b8a04d63b164273a743e0d2538a9704582dd72c2f49e8d557b77dd819e40",
+      "bytes": 1396080,
+      "verses": 6236
+    },
+    "juz_boundaries": {
+      "filename": "juzz-breakdown.tsv",
+      "title": "Quran Processing Toolkit juz boundaries",
+      "license": "Apache-2.0",
+      "sha256": "ee3e1e72be6bebe5e0dea0571b2a03a16ebc1fc3ae33397576341a529fb087f2",
+      "bytes": 243,
+      "juzs": 30
+    }
+  }
+}

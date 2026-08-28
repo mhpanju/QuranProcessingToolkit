@@ -1,1 +1,2 @@
-tqdm
+# The core package has no third-party runtime dependencies.
+# For faster JSON loading: pip install -e '.[fast]'

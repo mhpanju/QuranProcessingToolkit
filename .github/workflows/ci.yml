@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install -e packages/quran_processing_toolkit_qac_data
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check quran_processing_toolkit packages tests examples tools.py verses_per_juzz.py
+      - run: ruff format --check quran_processing_toolkit packages tests examples tools.py verses_per_juzz.py
+      - run: mypy quran_processing_toolkit packages/quran_processing_toolkit_qac_data/src
+      - run: python -m unittest discover -s tests -v
+      - run: python -m quran_processing_toolkit.build --check
+      - run: python -m quran_processing_toolkit validate
+      - run: python -m examples.compare_verse_endings
+      - run: python -m examples.present_verb_forms
+      - run: python -m examples.first_person_plural_only
+      - run: python -m examples.weak_letter_roots
+      - run: python -m examples.longest_without_mim_or_nun
+      - run: python -m build --outdir dist/core
+      - run: python -m build packages/quran_processing_toolkit_qac_data --outdir dist/data
+      - run: twine check dist/core/* dist/data/*
+      - name: Smoke-test built wheels outside the checkout
+        run: |
+          python -m venv /tmp/qpt-smoke
+          /tmp/qpt-smoke/bin/python -m pip install --no-deps dist/data/*.whl dist/core/*.whl
+          cd /tmp
+          /tmp/qpt-smoke/bin/python -c "from quran_processing_toolkit import load_quran; q = load_quran(); assert len(q.verses) == 6236"
+          /tmp/qpt-smoke/bin/quran-toolkit validate

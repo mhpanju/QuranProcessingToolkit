@@ -1,0 +1,19 @@
+THIRD-PARTY DATA NOTICES
+
+This distribution is an aggregation of files under different terms. Apache-2.0
+applies only to the packaging code, manifest, and juz-boundary table authored for
+Quran Processing Toolkit. It does not relicense the bundled annotation or Quran text.
+
+1. Quranic Arabic Corpus morphology version 0.4
+   Copyright (C) 2011 Kais Dukes
+   Source: https://corpus.quran.com/download/
+   Terms: QAC-TERMS.txt and the complete notice embedded in the source file.
+
+2. Tanzil Quran Text
+   Copyright (C) Tanzil Project
+   Source: https://tanzil.net/download/
+   Terms: TANZIL-QURAN-TEXT-LICENSE.txt and the complete notices embedded in the
+   source files.
+
+The source files are distributed verbatim. Quran Processing Toolkit interprets them
+at runtime; this data distribution contains no normalized or corrected morphology.
