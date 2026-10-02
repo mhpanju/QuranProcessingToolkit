@@ -30,6 +30,9 @@ jobs:
       - run: python -m examples.first_person_plural_only
       - run: python -m examples.weak_letter_roots
       - run: python -m examples.longest_without_mim_or_nun
+      - run: python -m examples.search_and_scope
+      - run: python -m examples.noun_morphology
+      - run: python -m examples.inspect_annotation
       - run: python -m build --outdir dist/core
       - run: python -m build packages/quran_processing_toolkit_qac_data --outdir dist/data
       - run: twine check dist/core/* dist/data/*

@@ -13,12 +13,15 @@ from .source_data import DataError, default_data_directory, verify_data_director
 
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
+    """One machine-readable validation finding and human-readable explanation."""
+
     severity: str
     code: str
     message: str
 
 
 def validate_corpus(data_dir: Path | None = None) -> tuple[ValidationIssue, ...]:
+    """Return every structural or semantic validation issue for a data directory."""
     issues: list[ValidationIssue] = []
     path = data_dir or default_data_directory()
     try:

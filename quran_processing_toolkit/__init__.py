@@ -5,6 +5,7 @@ from .corpus import (
     CorpusAlignmentError,
     CorpusError,
     QuranCorpus,
+    clear_memory_cache,
     default_data_directory,
     load_quran,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "VERB_FORM_NAMES",
     "Word",
     "WordAddress",
+    "clear_memory_cache",
     "default_data_directory",
     "canonical_representation",
     "infer_representation",
