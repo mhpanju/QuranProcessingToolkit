@@ -1,4 +1,11 @@
-"""Portable, validated loading and querying of verbatim Quran source data."""
+"""Load verified source data into the public, queryable Quran object graph.
+
+This module is the boundary between byte-preserved third-party data and convenient
+Python objects. Loading verifies all source hashes, derives normalized morphology,
+aligns it with Uthmani surface text, and constructs semantic indexes. It never writes
+to the installed data package; the optional disk cache contains only reproducible
+derived JSON in the user's cache directory.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +29,7 @@ from .models import (
 )
 from .source_data import (
     DataError,
+    default_cache_directory,
     default_data_directory,
     load_normalized_records,
 )
@@ -34,7 +42,7 @@ CorpusError = DataError
 
 
 class CorpusAlignmentError(DataError):
-    pass
+    """Raised when morphology word boundaries and Uthmani text cannot be aligned."""
 
 
 def _resolve_translation_path(
@@ -93,7 +101,11 @@ def _arabic_words(address: VerseAddress, text: str) -> list[str]:
 
 
 class QuranCorpus:
-    """The complete corpus, with 1-based semantic indexes at every level."""
+    """The complete Quran corpus with queryable, semantic 1-based indexes.
+
+    Constructing this class directly always builds a new object graph. Most programs
+    should call :func:`load_quran`, which reuses an in-process instance by default.
+    """
 
     __slots__ = (
         "data_dir",
@@ -140,20 +152,30 @@ class QuranCorpus:
         disk_cache: bool = True,
         cache_dir: str | os.PathLike[str] | None = None,
     ) -> QuranCorpus:
-        """Load a corpus, reusing the in-process instance by default."""
+        """Load a corpus, reusing an equivalent in-process instance by default.
+
+        ``cache`` controls whole-object reuse within this Python process.
+        ``disk_cache`` controls the verified derived-record cache between processes.
+        They are independent: disabling one does not disable the other.
+        """
         path = Path(data_dir).expanduser().resolve() if data_dir else default_data_directory()
         translation_path = _resolve_translation_path(translation)
+        resolved_cache_dir = (
+            Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_directory()
+        )
         translation_key: tuple[Any, ...] | None = None
         if translation_path:
             stat = translation_path.stat()
             translation_key = (translation_path, stat.st_size, stat.st_mtime_ns)
-        key = (path, translation_key)
+        # Loading options belong in the cache key. Otherwise a previous default load
+        # could silently defeat a later request for a specific cache directory.
+        key = (path, translation_key, disk_cache, resolved_cache_dir)
         if not cache:
             return cls(
                 path,
                 translation=translation_path,
                 disk_cache=disk_cache,
-                cache_dir=cache_dir,
+                cache_dir=resolved_cache_dir,
             )
         with _CACHE_LOCK:
             corpus = _CACHE.get(key)
@@ -162,7 +184,7 @@ class QuranCorpus:
                     path,
                     translation=translation_path,
                     disk_cache=disk_cache,
-                    cache_dir=cache_dir,
+                    cache_dir=resolved_cache_dir,
                 )
                 _CACHE[key] = corpus
             return corpus
@@ -269,12 +291,14 @@ class QuranCorpus:
 
     @property
     def verbs(self) -> QuerySet[Word]:
+        """Return all words with at least one verb stem, computed lazily once."""
         if self._verbs is None:
             self._verbs = self.words.filter(Word.is_verb)
         return self._verbs
 
     @property
     def nouns(self) -> QuerySet[Word]:
+        """Return all words with at least one noun stem, computed lazily once."""
         if self._nouns is None:
             self._nouns = self.words.filter(Word.is_noun)
         return self._nouns
@@ -295,21 +319,25 @@ class QuranCorpus:
         )
 
     def chapter(self, number: int) -> Chapter:
+        """Return chapter ``number`` using Quranic 1-based numbering."""
         return self.chapters[number]
 
     get_chapter = chapter
 
     def verse(self, chapter: int, verse: int) -> Verse:
+        """Return one verse by its 1-based chapter and verse numbers."""
         return self.verses[chapter, verse]
 
     get_verse = verse
 
     def word(self, chapter: int, verse: int, word: int) -> Word:
+        """Return one morphology word by its complete 1-based address."""
         return self.words[chapter, verse, word]
 
     get_word = word
 
     def token(self, chapter: int, verse: int, word: int, part: int) -> Token:
+        """Return one morphology segment by its complete 1-based address."""
         return self.tokens[chapter, verse, word, part]
 
     get_token = token
@@ -327,7 +355,12 @@ class QuranCorpus:
         return self._word_indexes[field]
 
     def find_words(self, **criteria: Any) -> QuerySet[Word]:
-        """Find words, using a lazy inverted index for equality criteria."""
+        """Find words by one or more exact attributes.
+
+        The first equality criterion uses a lazily built inverted index; remaining
+        criteria filter only those candidates. Tuple-valued word fields such as
+        ``roots`` use membership semantics through :meth:`QuerySet.where`.
+        """
         if not criteria:
             return QuerySet(self.words)
         field, expected = next(iter(criteria.items()))
@@ -335,6 +368,40 @@ class QuranCorpus:
             return self.words.where(**criteria)
         candidates = QuerySet(self.index_words(field).get(expected, ()))
         return candidates.where(**criteria)
+
+    def search(
+        self,
+        text: str,
+        *,
+        level: str = "verse",
+        representation: str = "auto",
+        **normalization: Any,
+    ) -> QuerySet[Verse] | QuerySet[Word]:
+        """Search verse or word text without requiring a predicate.
+
+        ASCII ``text`` is interpreted as Buckwalter when ``representation='auto'``;
+        non-ASCII text is interpreted as Arabic. ``level`` accepts singular or plural
+        ``'verse'`` and ``'word'``. Normalization options are the same as
+        :meth:`~quran_processing_toolkit.text.TextMixin.contains`.
+        """
+        level = level.lower().rstrip("s")
+        if level == "verse":
+            return self.verses.contains(text, representation=representation, **normalization)
+        if level == "word":
+            return self.words.contains(text, representation=representation, **normalization)
+        raise ValueError("search() level must be 'verse' or 'word'")
+
+    def stats(self) -> dict[str, int]:
+        """Return canonical object and linguistic subset counts."""
+        return {
+            "chapters": len(self.chapters),
+            "verses": len(self.verses),
+            "words": len(self.words),
+            "tokens": len(self.tokens),
+            "juzs": len(self.juzs),
+            "verbs": len(self.verbs),
+            "nouns": len(self.nouns),
+        }
 
     def longest_word_sequence(
         self,
@@ -377,6 +444,22 @@ def load_quran(
     disk_cache: bool = True,
     cache_dir: str | os.PathLike[str] | None = None,
 ) -> QuranCorpus:
+    """Load the Quran corpus with optional user data and two levels of caching.
+
+    Args:
+        data_dir: Directory containing a supported source-data manifest and files.
+            When omitted, discovery checks the environment override, installed data
+            distribution, and finally the monorepo checkout.
+        translation: Optional ``chapter|verse|text`` UTF-8 file. The
+            ``QURAN_PROCESSING_TOOLKIT_TRANSLATION`` environment variable is used
+            when this argument is omitted.
+        cache: Reuse an equivalent :class:`QuranCorpus` in this process.
+        disk_cache: Read and write the verified derived morphology cache.
+        cache_dir: Override the derived cache location for this load.
+
+    Returns:
+        A fully validated, immutable-by-convention corpus object graph.
+    """
     return QuranCorpus.load(
         data_dir,
         translation=translation,
@@ -384,3 +467,9 @@ def load_quran(
         disk_cache=disk_cache,
         cache_dir=cache_dir,
     )
+
+
+def clear_memory_cache() -> None:
+    """Forget all in-process corpus instances without deleting the disk cache."""
+    with _CACHE_LOCK:
+        _CACHE.clear()

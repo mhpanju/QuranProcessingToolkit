@@ -20,15 +20,15 @@ SUPPORTED_SOURCE_SHA256 = {
 
 
 class DataError(RuntimeError):
-    pass
+    """Base class for source discovery, integrity, and corpus-loading failures."""
 
 
 class DataPackageNotInstalledError(DataError):
-    pass
+    """Raised when no override, installed provider, or checkout data is available."""
 
 
 class DataIntegrityError(DataError):
-    pass
+    """Raised when source bytes or deterministic derivation fail verification."""
 
 
 def default_data_directory() -> Path:
@@ -72,6 +72,7 @@ def _sha256(path: Path) -> str:
 
 
 def load_manifest(data_dir: Path) -> dict[str, Any]:
+    """Load and minimally validate the source-data manifest schema."""
     path = data_dir / "manifest.json"
     try:
         with path.open(encoding="utf-8") as handle:
@@ -110,6 +111,7 @@ def verify_data_directory(data_dir: Path) -> dict[str, Any]:
 
 
 def default_cache_directory() -> Path:
+    """Return the environment override or platform-style user cache directory."""
     override = os.environ.get("QURAN_PROCESSING_TOOLKIT_CACHE")
     if override:
         return Path(override).expanduser().resolve()

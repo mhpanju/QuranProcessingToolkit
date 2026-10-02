@@ -28,10 +28,17 @@ class QueryTests(unittest.TestCase):
             )
         )
         self.assertGreater(len(self.quran.verses.contains("مُوسَى")), 0)
+        self.assertTrue(self.quran.words[1, 1, 1].equals("bisomi"))
 
     def test_normalization_is_opt_in(self) -> None:
         self.assertEqual(normalize_arabic("إِلَىٰ", strip_diacritics=True, normalize_alif=True), "الى")
         self.assertEqual(normalize_buckwalter("bisomi", strip_diacritics=True), "bsm")
+        self.assertEqual(
+            normalize_buckwalter(
+                "><|{Y a", normalize_alif=True, normalize_ya=True, remove_spaces=True
+            ),
+            "AAAAya",
+        )
 
     def test_ascii_input_automatically_uses_buckwalter(self) -> None:
         automatic = self.quran.verses.ends_with("n", strip_diacritics=True)
@@ -68,6 +75,36 @@ class QueryTests(unittest.TestCase):
         weak = self.quran.nouns.with_root_length(3).with_minimum_root_letter_count("Awy", 2)
         self.assertGreater(len(weak), 0)
 
+        plural_nouns = self.quran.nouns.with_number("pl")
+        self.assertGreater(len(plural_nouns), 0)
+        self.assertTrue(
+            all(
+                word.grammatical_number == "PLURAL" or "PLURAL" in word.grammatical_number
+                for word in plural_nouns
+            )
+        )
+
+    def test_token_morphology_helpers(self) -> None:
+        imperfect = self.quran.tokens.with_aspect("impf")
+        self.assertEqual(len(imperfect), 8330)
+        self.assertEqual(imperfect.all(), self.quran.tokens.with_tense("pres").all())
+        self.assertTrue(self.quran.tokens.with_role("stem"))
+        self.assertTrue(self.quran.tokens.with_source_feature("IMPF"))
+        self.assertTrue(self.quran.tokens.with_case("GEN"))
+
+    def test_search_and_address_scopes(self) -> None:
+        word_matches = self.quran.search("bisomi", level="words")
+        self.assertIn(self.quran.words[1, 1, 1], word_matches)
+        verse_matches = self.quran.search("bisomi", strip_diacritics=False)
+        self.assertIn(self.quran.verses[1, 1], verse_matches)
+        self.assertEqual(
+            self.quran.words.in_verse(1, 1).all(),
+            self.quran.verses[1, 1].words.all(),
+        )
+        self.assertEqual(len(self.quran.tokens.in_word(1, 1, 1)), 2)
+        with self.assertRaisesRegex(ValueError, "verse.*word"):
+            self.quran.search("b", level="chapter")
+
     def test_output_representations(self) -> None:
         verse = self.quran.get_verse(1, 1)
         self.assertEqual(verse.get_text("buckwalter"), verse.get_transliteration())
@@ -81,6 +118,10 @@ class QueryTests(unittest.TestCase):
         with redirect_stdout(output):
             translated.verses.show("english", limit=2, include_address=False)
         self.assertEqual(len(output.getvalue().splitlines()), 2)
+        matching_translation = translated.verses.contains(
+            "translation", representation="translation"
+        )
+        self.assertEqual(len(matching_translation), 2)
 
     def test_inverted_word_index(self) -> None:
         words = self.quran.find_words(root="ktb")

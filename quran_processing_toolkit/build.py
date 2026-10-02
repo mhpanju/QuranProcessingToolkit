@@ -194,6 +194,7 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def rebuild_records(source_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive convenience fields for every parsed source record in order."""
     return [normalize_record(record) for record in source_records]
 
 
@@ -203,6 +204,7 @@ def canonical_records_bytes(records: list[dict[str, Any]]) -> bytes:
 
 
 def records_digest(records: list[dict[str, Any]]) -> str:
+    """Return the SHA-256 of the canonical complete derived representation."""
     return hashlib.sha256(canonical_records_bytes(records)).hexdigest()
 
 
@@ -223,6 +225,7 @@ def write_records(records: list[dict[str, Any]], output: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run deterministic verification and/or write an explicit derived artifact."""
     from .source_data import default_data_directory, verify_data_directory
 
     parser = argparse.ArgumentParser(description=__doc__)

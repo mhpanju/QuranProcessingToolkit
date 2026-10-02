@@ -1,4 +1,11 @@
-"""Typed object model for the Quran corpus."""
+"""Typed objects representing addresses, tokens, words, verses, chapters, and juzs.
+
+The hierarchy follows the corpus rather than Python list positions: chapters, verses,
+words, and token parts are all addressed from one. A ``Word`` may contain several
+``Token`` objects because QAC stores prefixes, stems, and suffixes as separate
+morphological segments. Convenience properties on a word normally aggregate only its
+stem tokens so that prefixes do not unexpectedly supply a root or part of speech.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +18,8 @@ from .text import TextMixin
 
 @dataclass(frozen=True, slots=True, order=True)
 class VerseAddress:
+    """Immutable ``chapter:verse`` address using Quranic 1-based numbers."""
+
     chapter: int
     verse: int
 
@@ -24,6 +33,8 @@ class VerseAddress:
 
 @dataclass(frozen=True, slots=True, order=True)
 class WordAddress:
+    """Immutable ``chapter:verse:word`` address using 1-based numbers."""
+
     chapter: int
     verse: int
     word: int
@@ -34,6 +45,7 @@ class WordAddress:
         yield self.word
 
     def as_tuple(self) -> tuple[int, int, int]:
+        """Return the address in the form used by keyed collection lookups."""
         return self.chapter, self.verse, self.word
 
     def __str__(self) -> str:
@@ -42,6 +54,8 @@ class WordAddress:
 
 @dataclass(frozen=True, slots=True, order=True)
 class TokenAddress:
+    """Immutable ``chapter:verse:word:part`` address using 1-based numbers."""
+
     chapter: int
     verse: int
     word: int
@@ -54,6 +68,7 @@ class TokenAddress:
         yield self.part
 
     def as_tuple(self) -> tuple[int, int, int, int]:
+        """Return the address in the form used by keyed collection lookups."""
         return self.chapter, self.verse, self.word, self.part
 
     def __str__(self) -> str:
@@ -61,7 +76,12 @@ class TokenAddress:
 
 
 class Token(TextMixin):
-    """One morphological segment, retaining every processed-corpus field."""
+    """One QAC morphological segment with source and convenience annotations.
+
+    Unknown attributes are looked up against the retained uppercase record keys for
+    backwards compatibility. New code should prefer the documented lowercase
+    properties such as :attr:`root`, :attr:`aspect`, and :attr:`case`.
+    """
 
     __slots__ = ("_data",)
 
@@ -70,6 +90,7 @@ class Token(TextMixin):
 
     @property
     def address(self) -> TokenAddress:
+        """Return this segment's complete semantic address."""
         return TokenAddress(
             self._data["CHAPTER"],
             self._data["VERSE"],
@@ -79,6 +100,7 @@ class Token(TextMixin):
 
     @property
     def address_tuple(self) -> tuple[int, int, int, int]:
+        """Return ``(chapter, verse, word, part)`` without allocating an address."""
         return (
             self._data["CHAPTER"],
             self._data["VERSE"],
@@ -96,14 +118,37 @@ class Token(TextMixin):
         return f"Token({self.address}, {self.form!r}, tag={self.tag!r})"
 
     def get(self, field: str, default: Any = None) -> Any:
+        """Read an uppercase derived-record field without raising when absent."""
         return self._data.get(field, default)
 
     @property
     def data(self) -> dict[str, Any]:
+        """Return a shallow copy of all retained and derived record fields."""
         return self._data.copy()
 
     @property
+    def chapter(self) -> int:
+        """Return the 1-based chapter number."""
+        return self._data["CHAPTER"]
+
+    @property
+    def verse(self) -> int:
+        """Return the 1-based verse number within the chapter."""
+        return self._data["VERSE"]
+
+    @property
+    def word(self) -> int:
+        """Return the 1-based word number within the verse."""
+        return self._data["WORD"]
+
+    @property
+    def part(self) -> int:
+        """Return the 1-based morphological part number within the word."""
+        return self._data["WORD_PART"]
+
+    @property
     def form(self) -> str:
+        """Return the source Buckwalter surface form for this segment."""
         return self._data["FORM"]
 
     def get_form(self) -> str:
@@ -112,10 +157,12 @@ class Token(TextMixin):
 
     @property
     def tag(self) -> str:
+        """Return the source QAC tag, such as ``V``, ``N``, or ``P``."""
         return self._data["TAG"]
 
     @property
     def role(self) -> str:
+        """Return ``PREFIX``, ``STEM``, or ``SUFFIX``."""
         return self._data["TOKEN_ROLE"]
 
     @property
@@ -132,19 +179,97 @@ class Token(TextMixin):
 
     @property
     def part_of_speech(self) -> str | None:
+        """Return the QAC ``POS`` code when the segment supplies one."""
         return self._data.get("POS")
 
     @property
     def root(self) -> str | None:
+        """Return the Buckwalter root annotation when present."""
         return self._data.get("ROOT")
 
     @property
     def lemma(self) -> str | None:
+        """Return the Buckwalter lemma annotation when present."""
         return self._data.get("LEM")
 
     @property
     def transliteration(self) -> str:
+        """Return the segment's Buckwalter surface form."""
         return self.form
+
+    @property
+    def verb_form(self) -> str | None:
+        """Return the derived verb-form/baab code, such as ``I`` or ``IV``."""
+        return self._data.get("VERB_FORM")
+
+    @property
+    def baab(self) -> str | None:
+        """Alias for :attr:`verb_form`."""
+        return self.verb_form
+
+    @property
+    def aspect(self) -> str | None:
+        """Return ``PERFECT``, ``IMPERFECT``, or ``IMPERATIVE`` when present."""
+        return self._data.get("ASPECT")
+
+    @property
+    def tense(self) -> str | None:
+        """Return the toolkit's derived tense label when present."""
+        return self._data.get("TENSE")
+
+    @property
+    def voice(self) -> str | None:
+        """Return ``ACTIVE`` or ``PASSIVE`` for finite verbs."""
+        return self._data.get("VOICE")
+
+    @property
+    def case(self) -> str | None:
+        """Return the derived case/state annotation when present."""
+        return self._data.get("CASE")
+
+    @property
+    def mood(self) -> str | None:
+        """Return the untouched keyed QAC mood annotation when present."""
+        return self._data.get("MOOD")
+
+    @property
+    def gender(self) -> str | None:
+        """Return the derived ``MASC`` or ``FEM`` annotation when present."""
+        return self._data.get("GENDER")
+
+    @property
+    def definiteness(self) -> str | None:
+        """Return the derived definiteness annotation when present."""
+        return self._data.get("DEFINITENESS")
+
+    @property
+    def derived_noun(self) -> str | None:
+        """Return participle or verbal-noun classification when present."""
+        return self._data.get("DERIVED_NOUN")
+
+    @property
+    def conjugation(self) -> int | None:
+        """Return the legacy 1-through-14 conjugation identifier when present."""
+        return self._data.get("CONJUGATE")
+
+    @property
+    def person(self) -> int | None:
+        """Return grammatical person derived from the conjugation annotation."""
+        if self.conjugation is None:
+            return None
+        return int(_CONJUGATION_LABELS[self.conjugation][0])
+
+    @property
+    def grammatical_number(self) -> str | None:
+        """Return ``SINGULAR``, ``DUAL``, or ``PLURAL`` when annotated."""
+        if self.conjugation is not None:
+            suffix = _CONJUGATION_LABELS[self.conjugation][-1]
+            return {"S": "SINGULAR", "D": "DUAL", "P": "PLURAL"}[suffix]
+        return self._data.get("COUNT")
+
+    def has_source_feature(self, feature: str) -> bool:
+        """Return whether the exact non-keyed feature occurs in the source column."""
+        return feature in self.source_features
 
 
 _CONJUGATION_LABELS = {
@@ -183,6 +308,8 @@ VERB_FORM_NAMES = {
 
 
 class Word(TextMixin):
+    """One orthographic Quran word assembled from one or more QAC tokens."""
+
     __slots__ = ("address", "tokens", "_stem_tokens", "arabic_text")
 
     def __init__(self, address: WordAddress, tokens: list[Token], arabic_text: str) -> None:
@@ -193,6 +320,7 @@ class Word(TextMixin):
 
     @property
     def stem_tokens(self) -> QuerySet[Token]:
+        """Return only morphological segments classified as stems."""
         return QuerySet(self._stem_tokens)
 
     def __repr__(self) -> str:
@@ -200,21 +328,31 @@ class Word(TextMixin):
 
     @property
     def chapter(self) -> int:
+        """Return the 1-based chapter number."""
         return self.address.chapter
 
     @property
     def verse(self) -> int:
+        """Return the 1-based verse number within the chapter."""
         return self.address.verse
 
     @property
     def word(self) -> int:
+        """Return the 1-based word number within the verse."""
         return self.address.word
 
     @property
     def transliteration(self) -> str:
+        """Join all token forms into the word's complete Buckwalter spelling."""
         return "".join(token.form for token in self.tokens)
 
     def values(self, field: str, *, stems_only: bool = True) -> tuple[Any, ...]:
+        """Return distinct values of an uppercase token field in source order.
+
+        Stem-only aggregation is the default because affixes can have their own part
+        of speech and other annotations. Pass ``stems_only=False`` when explicitly
+        inspecting a complete segmented word.
+        """
         tokens = self._stem_tokens if stems_only else self.tokens
         result: list[Any] = []
         for token in tokens:
@@ -224,6 +362,7 @@ class Word(TextMixin):
         return tuple(result)
 
     def value(self, field: str, *, stems_only: bool = True) -> Any:
+        """Return ``None``, one field value, or a tuple for a multi-valued word."""
         values = self.values(field, stems_only=stems_only)
         if not values:
             return None
@@ -231,51 +370,64 @@ class Word(TextMixin):
 
     @property
     def roots(self) -> tuple[str, ...]:
+        """Return every distinct stem root in source order."""
         return self.values("ROOT")
 
     @property
     def root(self) -> str | tuple[str, ...] | None:
+        """Return the sole root, multiple roots, or ``None``."""
         return self.value("ROOT")
 
     @property
     def lemmas(self) -> tuple[str, ...]:
+        """Return every distinct stem lemma in source order."""
         return self.values("LEM")
 
     @property
     def lemma(self) -> str | tuple[str, ...] | None:
+        """Return the sole lemma, multiple lemmas, or ``None``."""
         return self.value("LEM")
 
     @property
     def parts_of_speech(self) -> tuple[str, ...]:
+        """Return every distinct stem part-of-speech code."""
         return self.values("POS")
 
     @property
     def part_of_speech(self) -> str | tuple[str, ...] | None:
+        """Return one part of speech, several, or ``None``."""
         return self.value("POS")
 
     @property
     def is_multi_stem(self) -> bool:
+        """Return whether QAC represents the word with more than one stem."""
         return len(self._stem_tokens) > 1
 
     def has_part_of_speech(self, value: str) -> bool:
+        """Return whether any stem has the exact QAC part-of-speech code."""
         return value in self.parts_of_speech
 
     def is_verb(self) -> bool:
+        """Return whether any stem is tagged as a verb."""
         return self.has_part_of_speech("V")
 
     def is_noun(self) -> bool:
+        """Return whether any stem is tagged as a noun."""
         return self.has_part_of_speech("N")
 
     @property
     def verb_form(self) -> str | tuple[str, ...] | None:
+        """Return one or more Roman-numeral verb-form codes."""
         return self.value("VERB_FORM")
 
     @property
     def baab(self) -> str | tuple[str, ...] | None:
+        """Convenience alias for :attr:`verb_form`."""
         return self.verb_form
 
     @property
     def baab_name(self) -> str | tuple[str, ...] | None:
+        """Return familiar transliterated names for the word's verb forms."""
         forms = self.values("VERB_FORM")
         names = tuple(VERB_FORM_NAMES.get(form, form) for form in forms)
         return names[0] if len(names) == 1 else names or None
@@ -289,38 +441,48 @@ class Word(TextMixin):
         return self.verb_form
 
     def get_root(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`root`."""
         return self.root
 
     def get_lemma(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`lemma`."""
         return self.lemma
 
     @property
     def tense(self) -> str | tuple[str, ...] | None:
+        """Return derived convenience tense values from all stems."""
         return self.value("TENSE")
 
     def get_tense(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`tense`."""
         return self.tense
 
     @property
     def aspect(self) -> str | tuple[str, ...] | None:
+        """Return grammatical aspect values from all stems."""
         return self.value("ASPECT")
 
     def get_aspect(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`aspect`."""
         return self.aspect
 
     @property
     def voice(self) -> str | tuple[str, ...] | None:
+        """Return finite verb voice values from all stems."""
         return self.value("VOICE")
 
     def get_voice(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`voice`."""
         return self.voice
 
     @property
     def conjugation(self) -> int | tuple[int, ...] | None:
+        """Return legacy numeric conjugation identifiers from all stems."""
         return self.value("CONJUGATE")
 
     @property
     def conjugation_labels(self) -> tuple[str, ...]:
+        """Return compact person/gender/number labels such as ``3MS``."""
         return tuple(
             _CONJUGATION_LABELS[number]
             for number in self.values("CONJUGATE")
@@ -329,30 +491,62 @@ class Word(TextMixin):
 
     @property
     def person(self) -> int | tuple[int, ...] | None:
+        """Return one or more grammatical persons derived from conjugation."""
         values = tuple(dict.fromkeys(int(label[0]) for label in self.conjugation_labels))
         return values[0] if len(values) == 1 else values or None
 
     def get_person(self) -> int | tuple[int, ...] | None:
+        """Compatibility method returning :attr:`person`."""
         return self.person
 
     @property
     def grammatical_number(self) -> str | tuple[str, ...] | None:
+        """Return singular, dual, or plural from conjugation or nominal count."""
         mapping = {"S": "SINGULAR", "D": "DUAL", "P": "PLURAL"}
         values = tuple(dict.fromkeys(mapping[label[-1]] for label in self.conjugation_labels))
-        return values[0] if len(values) == 1 else values or None
+        if values:
+            return values[0] if len(values) == 1 else values
+        # Nominals carry COUNT directly rather than through a finite-verb
+        # conjugation label. Falling back here makes with_number() useful for both.
+        return self.value("COUNT")
 
     def get_number(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`grammatical_number`."""
         return self.grammatical_number
 
     @property
     def gender(self) -> str | tuple[str, ...] | None:
+        """Return masculine/feminine values from all stems."""
         return self.value("GENDER")
 
     def get_gender(self) -> str | tuple[str, ...] | None:
+        """Compatibility method returning :attr:`gender`."""
         return self.gender
+
+    @property
+    def case(self) -> str | tuple[str, ...] | None:
+        """Return the word's derived case/state annotation."""
+        return self.value("CASE")
+
+    @property
+    def mood(self) -> str | tuple[str, ...] | None:
+        """Return the word's untouched keyed QAC mood annotation."""
+        return self.value("MOOD")
+
+    @property
+    def definiteness(self) -> str | tuple[str, ...] | None:
+        """Return the word's derived definiteness annotation."""
+        return self.value("DEFINITENESS")
+
+    @property
+    def derived_noun(self) -> str | tuple[str, ...] | None:
+        """Return verbal-noun or participle classification when present."""
+        return self.value("DERIVED_NOUN")
 
 
 class Verse(TextMixin):
+    """A Quran verse with words, Uthmani text, and an optional translation."""
+
     __slots__ = ("address", "words", "arabic_text", "translation_text")
 
     def __init__(
@@ -372,22 +566,28 @@ class Verse(TextMixin):
 
     @property
     def chapter(self) -> int:
+        """Return the 1-based chapter number."""
         return self.address.chapter
 
     @property
     def verse(self) -> int:
+        """Return the 1-based verse number within the chapter."""
         return self.address.verse
 
     @property
     def transliteration(self) -> str:
+        """Join word transliterations with spaces in Quranic order."""
         return " ".join(word.transliteration for word in self.words)
 
     @property
     def has_translation(self) -> bool:
+        """Return whether a user-supplied translation covers this verse."""
         return self.translation_text is not None
 
 
 class Chapter:
+    """A 1-based chapter containing a 1-based verse collection."""
+
     __slots__ = ("number", "verses")
 
     def __init__(self, number: int, verses: list[Verse]) -> None:
@@ -396,6 +596,7 @@ class Chapter:
 
     @property
     def chapter(self) -> int:
+        """Alias for the chapter's numeric address."""
         return self.number
 
     def __repr__(self) -> str:
@@ -404,6 +605,8 @@ class Chapter:
 
 @dataclass(frozen=True, slots=True)
 class Juz:
+    """One of thirty sequential juz divisions and its ordered verses."""
+
     number: int
     start: VerseAddress
     verses: QuerySet[Verse]
