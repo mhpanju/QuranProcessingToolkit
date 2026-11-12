@@ -18,7 +18,6 @@ jobs:
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_CHECKOUT: ${{ github.workspace }}
-      QURAN_PROCESSING_TOOLKIT_CACHE: ${{ runner.temp }}/qpt-pypi-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +33,8 @@ jobs:
             "quran-processing-toolkit[data]==${RELEASE_VERSION}"
           "$RUNNER_TEMP/qpt-pypi/bin/python" -m pip check
       - name: Verify the installed API and release documentation
+        env:
+          QURAN_PROCESSING_TOOLKIT_CACHE: ${{ runner.temp }}/qpt-pypi-cache
         run: |
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/qpt-pypi/bin/python" - <<'PYTHON'
