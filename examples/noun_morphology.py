@@ -4,8 +4,8 @@ from quran_processing_toolkit import load_quran
 
 quran = load_quran()
 
-plural_feminine_nouns = quran.nouns.with_number("plural").with_gender("f")
-verbal_nouns = quran.nouns.with_derived_noun("verbal_noun")
+plural_feminine_nouns = quran.noun_words.with_number("plural").with_gender("f")
+verbal_nouns = quran.noun_words.with_derived_noun("verbal_noun")
 
 print("Plural feminine noun occurrences:", len(plural_feminine_nouns))
 plural_feminine_nouns.show("arabic", limit=10)

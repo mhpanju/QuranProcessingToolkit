@@ -1,21 +1,45 @@
 # Release process
 
-The core and source data are independent distributions with independent versions and
-licenses. Never combine their artifacts or upload the old `corpus/` directory.
+Core and source data are independent distributions with separate versions and
+licenses. The current first production release is core **0.4.0** and data **0.4.0**.
+Never combine their artifacts or upload the historical `corpus/` directory.
 
-## One-time configuration
+## Trusted Publishing configuration
 
-1. Create `quran-processing-toolkit-qac-data` and `quran-processing-toolkit` on
-   TestPyPI, then PyPI.
-2. Configure each project to trust its corresponding GitHub Actions workflow and the
-   `pypi` environment.
-3. Protect the `pypi` environment with required review.
-4. Configure equivalent publishers for the manual `publish-test.yml` workflow and
-   the `testpypi` environment.
+A new project can be created through a pending publisher; an initial token upload
+is not required. In [PyPI account publishing](https://pypi.org/manage/account/publishing/),
+configure these GitHub publishers:
 
-## Pre-release checks
+| PyPI project | Owner | Repository | Workflow filename | Environment |
+|---|---|---|---|---|
+| `quran-processing-toolkit-qac-data` | `mhpanju` | `QuranProcessingToolkit` | `publish-data.yml` | `pypi` |
+| `quran-processing-toolkit` | `mhpanju` | `QuranProcessingToolkit` | `publish-core.yml` | `pypi` |
 
-Run from a clean checkout:
+If the project already exists, add the publisher in that project's publishing
+settings. Workflow filenames are case-sensitive and exclude `.github/workflows/`.
+See [PyPI's pending publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+
+The repository's `pypi` environment permits `data-v*` and `core-v*` tags and requires
+review. Keep these protections. Approve the waiting deployment for the intended
+release commit after its checks pass. No long-lived PyPI API token is needed.
+
+For TestPyPI, configure the same two projects to trust `publish-test.yml` in the
+`testpypi` environment. The **Publish to TestPyPI** workflow accepts `data` or `core`
+via manual dispatch. A version already uploaded there cannot be uploaded again.
+
+## Prepare a release
+
+1. Update the core `__version__` in `quran_processing_toolkit/__init__.py` and, only
+   when releasing data, the data `__version__` in its `src` package.
+2. Keep the core's `data` extra pinned to the intended data version in `pyproject.toml`.
+3. Update `CHANGELOG.md`, README, API reference, guides, and examples to match.
+4. Review the diff, including licensing boundaries and source hashes.
+5. Merge the release commit to `master` after CI passes.
+
+The original source bytes, derived transformation version, and canonical digest
+must remain unchanged unless a separate source/interpretation change is reviewed.
+
+## Local checks and artifacts
 
 ```bash
 python -m pip install -e packages/quran_processing_toolkit_qac_data
@@ -26,23 +50,53 @@ mypy quran_processing_toolkit packages/quran_processing_toolkit_qac_data/src
 python -m unittest discover -s tests -v
 python -m quran_processing_toolkit.build --check
 python -m quran_processing_toolkit validate
+
+# Use a new output directory for each release to avoid stale uploads.
+python -m build --outdir /tmp/qpt-release/core
+python -m build packages/quran_processing_toolkit_qac_data --outdir /tmp/qpt-release/data
+python -m twine check --strict /tmp/qpt-release/core/* /tmp/qpt-release/data/*
 ```
 
-CI additionally builds both distributions, runs `twine check`, and installs the two
-wheels into a clean environment outside the checkout.
+Inspect wheel and sdist contents: the core must not contain Quran text, morphology,
+translations, caches, or generated research results. Both distributions must include
+their declared license files. Install built wheels in a fresh virtual environment
+outside the checkout and run `quran-toolkit validate` and `quran-rebuild --check`.
+The README and AI-guide starting examples run in the documentation test suite.
 
-## Versions and tags
+## Publish data before core
 
-- Data tags have the form `data-v0.4.0` and publish only the data distribution.
-- Core tags have the form `core-v0.3.0` and publish only the core distribution.
+Example for 0.4.0; substitute reviewed versions for later releases:
 
-The data package must be published first because the core package's optional `data`
-extra refers to its exact version. Published files and versions cannot be replaced;
-fixes require a new version such as `0.4.0.post1`.
+```bash
+git tag -a data-v0.4.0 -m "Release source data 0.4.0" <release-commit>
+git push origin data-v0.4.0
+```
 
-Before a production tag, run the **Publish to TestPyPI** workflow manually for `data`
-and then `core`. Install both resulting wheels from TestPyPI in a clean environment.
+The tag runs the full CI matrix on Python 3.10–3.14, builds wheel and sdist, checks
+metadata, and requires exact tag/version agreement. A separate job publishes those
+artifacts after environment review. Wait for success and verify the data project on
+PyPI before publishing the core:
 
-Before pushing a tag, confirm that it points to the reviewed commit and its version
-matches the corresponding package metadata. The tag-triggered workflows use PyPI
-Trusted Publishing and require no long-lived API token.
+```bash
+git tag -a core-v0.4.0 -m "Release toolkit 0.4.0" <release-commit>
+git push origin core-v0.4.0
+```
+
+Then install from **production PyPI** in a new environment outside the checkout:
+
+```bash
+python -m venv /tmp/qpt-pypi-smoke
+/tmp/qpt-pypi-smoke/bin/python -m pip install --index-url https://pypi.org/simple \
+  "quran-processing-toolkit[data]==0.4.0"
+cd /tmp
+/tmp/qpt-pypi-smoke/bin/quran-toolkit stats
+/tmp/qpt-pypi-smoke/bin/quran-toolkit validate
+/tmp/qpt-pypi-smoke/bin/quran-rebuild --check
+```
+
+Confirm installed versions, execute a morphology query, and check the project-page
+README and documentation links. Create GitHub release notes from `CHANGELOG.md`.
+
+Published versions/files cannot be replaced. Fixes need a new version; do not delete
+and reuse a released version or move a published release tag. A core-only update can
+continue pinning an already published data version.

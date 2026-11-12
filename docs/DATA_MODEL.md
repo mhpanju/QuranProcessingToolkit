@@ -34,8 +34,8 @@ words within a verse, token parts within a word, and juzs.
 
 ```python
 quran.chapters[1]
-quran.chapters.keys()       # (1, 2, ..., 114)
-quran.chapters.items()      # ((1, Chapter(...)), ...)
+quran.chapters.keys()  # (1, 2, ..., 114)
+quran.chapters.items()  # ((1, Chapter(...)), ...)
 ```
 
 Zero and out-of-range Quranic numbers raise `KeyError`. Non-integer keys raise
@@ -60,7 +60,7 @@ Every filter returns an immutable `QuerySet`. A result set is not itself a seman
 Quranic index, so it follows Python sequence conventions:
 
 ```python
-results = quran.verbs.with_form("IV")
+results = quran.verb_words.with_form("IV")
 first = results[0]
 first_ten = results[:10]
 also_first_ten = results.take(10)
@@ -86,15 +86,28 @@ str(quran.word(2, 255, 1).address)  # "2:255:1"
 Word and token addresses provide `as_tuple()`. Verse addresses can be unpacked because
 all address objects are iterable.
 
+## Surface words and chapter labels
+
+`verse.surface_words(ignore_pause_marks=True)` returns a tuple of literal-space
+segments with only optional pause-mark deletion. It does not use the QAC `Word`
+collection or its orthographic contractions. Consequently its 1-based positions
+(including those in `VerseMatch`) are not interchangeable with morphology addresses.
+Stored Arabic, vowel marks, spelling, and Unicode character composition are unchanged.
+
+Chapter labels are available through `chapter.name`, `.name_arabic`, `.name_english`,
+and `.get_name(representation)`. `verse.get_chapter_name()` avoids needing a separate
+corpus lookup just to label a verse. English chapter-name meanings do not depend on
+the optional English verse translation.
+
 ## Tokens and words
 
 QAC morphology is segmented. A written word can be represented by a prefix token, a
 stem token, and a suffix token. Consequently:
 
 ```python
-word.tokens          # every segment, 1-based
-word.stem_tokens     # only STEM segments
-word.transliteration # concatenation of every segment form
+word.tokens  # every segment, 1-based
+word.stem_tokens  # only STEM segments
+word.transliteration  # concatenation of every segment form
 ```
 
 Word-level morphology normally aggregates stems only:

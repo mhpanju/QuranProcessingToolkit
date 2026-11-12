@@ -1,0 +1,30 @@
+# Quran Processing Toolkit
+
+> Python 3.10+ library for Quranic text and morphology. First production release:
+> 0.4.0. Install: pip install "quran-processing-toolkit[data]". Import:
+> from quran_processing_toolkit import load_quran. Normal loading is offline.
+
+Semantic Quranic indexes are 1-based; filtered QuerySets are zero-based.
+quran.verbs() and quran.nouns() select tokens; quran.verb_words and quran.noun_words
+select whole words. ASCII text input means case-sensitive Buckwalter. Text
+normalization is explicit. Code, source data, and opt-in translations have separate
+licensing terms. No translation is bundled. Do not invent undocumented methods.
+
+## Usage and API
+
+- [AI usage guide](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/AI_GUIDE.md): Executable introduction, task mappings, errors, and pitfalls.
+- [Getting started](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/GETTING_STARTED.md): Installation, indexing, queries, and output.
+- [API reference](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/API_REFERENCE.md): Public classes, methods, signatures, and exceptions.
+- [Query cookbook](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/QUERY_COOKBOOK.md): Complete research examples.
+- [Data model](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/DATA_MODEL.md): Address semantics, words, tokens, and multi-stem behavior.
+- [Morphology](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/MORPHOLOGY.md): Tags, fields, aliases, and tense/aspect interpretation.
+- [Translations](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/TRANSLATIONS.md): Local TXT/JSON, pinned opt-in downloads, coverage, and third-party terms.
+- [CLI](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/CLI.md): Search, stats, validation, provenance, rebuild.
+
+## Provenance and maintenance
+
+- [Data provenance](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/DATA_PROVENANCE.md): Source hashes and licensing boundaries.
+- [Architecture](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/ARCHITECTURE.md): Verification, deterministic derivation, and caches.
+- [Changelog](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/CHANGELOG.md): Release notes and migration from the TestPyPI preview.
+- [Roadmap](https://raw.githubusercontent.com/mhpanju/QuranProcessingToolkit/master/docs/ROADMAP.md): Known limitations and future features.
+- [Examples](https://github.com/mhpanju/QuranProcessingToolkit/tree/master/examples): Runnable research scripts and JSON/TSV exporters.

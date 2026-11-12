@@ -9,7 +9,8 @@ The repository builds two distributions:
 
 ```text
 quran-processing-toolkit
-└── Python loader, transformation, model, queries, CLI, and validation
+├── Python loader, transformation, model, queries, CLI, and validation
+└── attributed chapter-label/verse-count metadata and its notice
 
 quran-processing-toolkit-qac-data
 ├── verbatim QAC morphology 0.4
@@ -19,7 +20,9 @@ quran-processing-toolkit-qac-data
 └── complete legal notices
 ```
 
-The code package is Apache-2.0. The data wheel necessarily carries the terms attached
+The Python code is Apache-2.0; the small chapter-label table has its own CC-BY
+attribution (upstream does not identify a version). See
+[Third-party notices](../THIRD_PARTY_NOTICES.md). The data wheel carries the terms attached
 to each source. A translation is deliberately outside both distributions.
 
 ## Load pipeline
@@ -119,6 +122,7 @@ spaces where QAC treats the sequence as one word. A mismatch anywhere raises
 
 - resolved data directory;
 - translation path, size, and nanosecond modification time;
+- immutable Translation content/attribution fingerprint, when supplied as an object;
 - disk-cache choice; and
 - resolved cache directory.
 

@@ -137,28 +137,37 @@ Normalization never happens unless requested. Common options are:
 The most frequently needed subsets are ready-made:
 
 ```python
-quran.verbs
-quran.nouns
+quran.verbs()  # individual verb stems
+quran.nouns()  # N tokens
+quran.particles()  # particle tokens, including attached segments
+quran.verb_words  # whole words containing a verb stem
+quran.noun_words  # whole words containing an N stem
+```
+
+The callable shortcuts are available in 0.4.0, the first production PyPI release. Earlier scripts using
+`quran.verbs` or `quran.nouns` should use `verb_words` or `noun_words` to preserve
+their word-level behavior. The [API reference](API_REFERENCE.md) lists all shortcuts.
+
+```python
+emphatic = quran.verbs().with_nun_of_emphasis()
+ordinary = quran.verbs().without_nun_of_emphasis()
+assert quran.token(2, 38, 6, 1).has_nun_of_emphasis()
 ```
 
 Named filters compose and always return another immutable `QuerySet`:
 
 ```python
-passive_present = (
-    quran.verbs
-    .with_tense("present")
-    .with_voice("passive")
-)
+passive_present = quran.verb_words.with_tense("present").with_voice("passive")
 
-first_plural = quran.verbs.with_person(1).with_number("plural")
-accusative_nouns = quran.nouns.with_case("acc")
-form_four = quran.verbs.with_form("IV")
+first_plural = quran.verb_words.with_person(1).with_number("plural")
+accusative_nouns = quran.noun_words.with_case("acc")
+form_four = quran.verb_words.with_form("IV")
 ```
 
 Scope any addressed result to a location:
 
 ```python
-medina_example = quran.verbs.in_chapter(2).with_form("IV")
+medina_example = quran.verb_words.in_chapter(2).with_form("IV")
 verse_tokens = quran.tokens.in_verse(2, 255)
 word_tokens = quran.tokens.in_word(2, 255, 1)
 ```
@@ -166,7 +175,7 @@ word_tokens = quran.tokens.in_word(2, 255, 1)
 ## Summarize results
 
 ```python
-present = quran.verbs.with_tense("present")
+present = quran.verb_words.with_tense("present")
 
 print(len(present))
 print(present.first())

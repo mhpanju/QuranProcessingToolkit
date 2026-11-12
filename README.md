@@ -1,202 +1,156 @@
 # Quran Processing Toolkit
 
-Natural, typed Python access to Quranic text and morphology—with an ASCII-first query
-interface and Quranic 1-based addresses.
+Typed Python access to Quranic text, morphology, and composable research queries.
+Search in Arabic or ASCII Buckwalter, inspect every original annotation, and address
+chapters, verses, words, and tokens using Quranic 1-based indexes.
 
-```python
-from quran_processing_toolkit import load_quran
+Requires **Python 3.10+**. Version **0.4.0** is the first production PyPI release;
+the API is early-stage and future minor releases may introduce documented changes.
 
-quran = load_quran()
-
-# ASCII input is Buckwalter, so an Arabic keyboard is optional.
-present = quran.verbs.with_tense("present")
-print(present.most_common_forms(limit=5))
-
-ending_in_nun = quran.verses.ends_with("n", strip_diacritics=True)
-ending_in_nun.show("arabic", limit=3)
-```
-
-The toolkit combines the verbatim Quranic Arabic Corpus (QAC) morphology source with
-verbatim Tanzil Uthmani text at load time. It verifies both sources, builds a friendly
-object model, and preserves every original annotation. No translation is bundled.
-
-## What this package is for
-
-It is designed for exploratory questions that should read like ordinary Python:
-
-```python
-# Which verb form is most common in present-tense verbs?
-quran.verbs.with_tense("present").most_common_forms()
-
-# Which roots occur in first-person plural verbs but not first-person singular verbs?
-plural = quran.verbs.with_person(1).with_number("plural")
-singular = quran.verbs.with_person(1).with_number("singular")
-plural_only_roots = plural.roots() - singular.roots()
-
-# Which three-letter noun roots contain at least two weak letters?
-weak = quran.nouns.with_root_length(3).with_minimum_root_letter_count("Awy", 2)
-
-# What is the longest within-verse run containing neither mim nor nun?
-longest = quran.longest_word_sequence_without_letters("mn", strip_diacritics=True)
-```
-
-Named methods cover common work, while `where()`, `filter()`, `group_by()`, and
-`count_by()` remain available for advanced analysis. SQL is never required.
-
-## Installation
-
-Code and data are deliberately separate distributions because their licenses differ:
+## Install and run
 
 ```bash
 python -m pip install "quran-processing-toolkit[data]"
 ```
 
-That convenience extra installs:
+```python
+from quran_processing_toolkit import load_quran
 
-- `quran-processing-toolkit`: Apache-2.0 Python code; and
-- `quran-processing-toolkit-qac-data`: separately licensed, verbatim source data.
+quran = load_quran()
+assert len(quran.chapters) == 114
+assert len(quran.verses) == 6236
 
-For a faster derived-cache decode, install the optional `fast` extra too:
+print(quran.chapter(2).name)  # al-Baqarah
+print(quran.verse(2, 255).get_arabic())
 
-```bash
-python -m pip install "quran-processing-toolkit[data,fast]"
+# ASCII search input is Buckwalter, so an Arabic keyboard is optional.
+quran.search("muwsaY").show("arabic", limit=3)
+
+# These are verb tokens: all filters apply to the same morphological stem.
+present = quran.verbs().with_tense("present")
+print(present.most_common_forms(limit=5))
+
+quran.verses.ends_with("n", strip_diacritics=True).show("arabic", limit=3)
 ```
 
-The two distributions can also be installed independently. See
-[Data provenance](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md)
-before redistributing either artifact.
+Loading is offline and verifies the installed source data. Nothing is downloaded
+implicitly. The core has no mandatory third-party Python dependencies. Code and data
+are separate distributions because their licenses differ; the `data` extra installs
+the matching source-data package. For optional faster cache decoding, install
+`"quran-processing-toolkit[data,fast]"`.
 
-## The object model
+## What you can do
+
+| Task | API | Guide |
+|---|---|---|
+| Look up an address | `quran.verse(2, 255)` | [Getting started](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/GETTING_STARTED.md) |
+| Search Arabic or Buckwalter | `quran.search("muwsaY")` | [Query cookbook](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/QUERY_COOKBOOK.md) |
+| Filter stems by root, form, tense, voice, person, or number | `quran.verbs().with_root("qwl")` | [Morphology](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/MORPHOLOGY.md) |
+| Select nouns, pronouns, particles, and other parts of speech | `quran.nouns()`, `quran.pronouns()` | [API reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/API_REFERENCE.md) |
+| Count, group, and export results | `results.count_by("root")`, `results.select("address")` | [Cookbook](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/QUERY_COOKBOOK.md) |
+| Compare two verses for one-word edits | `compare_verses(a, b)` | [Comparison API](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/API_REFERENCE.md#chapter-names-and-surface-word-comparison) |
+| Add a local translation or explicitly download one | `load_translation()`, `download_translation()` | [Translations](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/TRANSLATIONS.md) |
+| Inspect sources and validate the corpus | `quran.provenance()`, `quran-toolkit validate` | [Data provenance](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md) |
+
+SQL and a database server are not required. Named helpers cover ordinary queries;
+`where()`, `filter()`, `group_by()`, and `count_by()` support custom analyses.
+
+## Addresses, words, and tokens
 
 ```python
-fatihah = quran.chapters[1]
-first_verse = quran.verses[1, 1]
-first_word = quran.words[1, 1, 1]
-first_part = quran.tokens[1, 1, 1, 1]
-first_juz = quran.juzs[1]
+chapter = quran.chapters[1]
+verse = quran.verses[2, 255]
+word = quran.words[2, 255, 1]
+token = quran.tokens[2, 255, 1, 1]
+juz = quran.juzs[1]
+
+results = quran.verbs().in_chapter(2)
+first_result = results[0]  # filtered results use ordinary zero-based positions
 ```
 
-These are semantic Quranic indexes—not padded Python lists. Chapter 1 is
-`quran.chapters[1]`; there is no dummy chapter 0. A filtered `QuerySet`, by contrast,
-uses ordinary Python result positions: `results[0]` is its first result.
+A **word** is a QAC-aligned orthographic word. A **token** is one morphological
+segment: prefixes, stems, and suffixes can be separate tokens inside a word.
+`quran.verbs()` and `quran.nouns()` return tokens; `quran.verb_words` and
+`quran.noun_words` return whole words. Chained word filters aggregate stem values,
+so use token queries when all conditions must match a single stem.
 
-The hierarchy is:
-
-```text
-QuranCorpus
-├── Chapter → Verse → Word → Token
-├── verses[(chapter, verse)]
-├── words[(chapter, verse, word)]
-├── tokens[(chapter, verse, word, part)]
-└── Juz → Verse
-```
-
-A token is one morphological segment. Prefixes, stems, and suffixes can therefore be
-separate tokens inside one orthographic word. Word-level morphology aggregates stem
-tokens and retains multiple values rather than silently choosing one.
+On a token, `form` is its surface spelling and `verb_form` is its Roman-numeral
+morphological form. The query `with_form("IV")` selects the morphological form.
+Roots and lemmas use case-sensitive Buckwalter; categorical aliases such as
+`"present"`, `"IMPF"`, `"passive"`, and `"PASS"` are accepted by the relevant helpers.
 
 See [Data model and indexing](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_MODEL.md)
-for the precise semantics.
+for multi-stem behavior and the full hierarchy.
 
-## Text and ASCII-first search
-
-All words and verses provide `starts_with()`, `ends_with()`, `contains()`, `equals()`,
-letter tests, and character counts. The same operations work on collections:
+## Compose research queries
 
 ```python
-quran.search("muwsaY")
-quran.search("مُوسَى")
+# Roots found in first-person plural verbs but never first-person singular verbs.
+plural = quran.verbs().with_person(1).with_number("plural")
+singular = quran.verbs().with_person(1).with_number("singular")
+plural_only_roots = plural.roots() - singular.roots()
 
-quran.words.starts_with("Al")
-quran.verses.contains_any_letter("mn")
-quran.verses.without_letters("mn")
-```
+# Three-letter noun roots with at least two weak letters.
+weak_roots = quran.nouns().with_root_length(3).with_minimum_root_letter_count("Awy", 2)
 
-With `representation="auto"`, ASCII input is interpreted as Buckwalter and non-ASCII
-input as Arabic. Normalization is opt-in:
+# Explicit nun-of-emphasis annotations associated with their verb stem.
+emphatic = quran.verbs().with_nun_of_emphasis()
+assert len(emphatic) == 243
 
-```python
-matches = quran.verses.ends_with(
-    "n",
-    strip_diacritics=True,
-    strip_quranic_marks=True,
-)
-```
+# The longest within-verse word run containing neither mim nor nun.
+longest = quran.longest_word_sequence_without_letters("mn", strip_diacritics=True)
 
-Available outputs are Arabic, Buckwalter, and a user-supplied translation:
-
-```python
-verse = quran.verse(2, 255)
-print(verse.get_arabic())
-print(verse.get_transliteration())
-
-matches.show("arabic", limit=10)
-matches.show("buckwalter", limit=10)
-```
-
-## Morphology
-
-Word- and token-level helpers include:
-
-```python
-quran.verbs.with_form("IV")
-quran.verbs.with_aspect("imperfect")
-quran.verbs.with_voice("passive")
-quran.verbs.with_person(1).with_number("plural")
-quran.nouns.with_gender("f").with_case("acc")
-quran.tokens.with_role("prefix")
-quran.tokens.with_tag("V")
-quran.tokens.with_source_feature("IMPF")
-```
-
-Source aliases such as `PERF`, `IMPF`, `ACT`, and `PASS` are accepted by the relevant
-helpers. Original QAC content remains inspectable:
-
-```python
-token = quran.token(2, 255, 1, 1)
+# Preserve access to every original annotation.
+token = quran.token(2, 38, 6, 1)
 print(token.source_feature_text)
 print(token.source_features)
-print(token.data)
 ```
 
-See [Morphology reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/MORPHOLOGY.md)
-for fields, derived values, aliases,
-multi-stem behavior, and the distinction between aspect and tense.
+Text matching is literal by default. ASCII input selects Buckwalter; non-ASCII
+input selects Arabic. Pass normalization options explicitly, for example
+`strip_diacritics=True`, `strip_quranic_marks=True`, or `normalize_alif=True`.
+Use `representation="translation"` for translation search so English input is
+not interpreted as Buckwalter.
 
-## User-supplied translations
+## Translations and verse comparison
 
-Pass a UTF-8 `chapter|verse|text` file:
-
-```text
-1|1|Translation of verse 1:1
-1|2|Translation of verse 1:2
-```
+Translations are optional. Load your own UTF-8 `chapter|verse|text` file or supported
+JSON file:
 
 ```python
 translated = load_quran(translation="/path/to/translation.txt")
 print(translated.verse(1, 1).get_translation())
-translated.verses.show("english", limit=3)
 ```
 
-The environment variable `QURAN_PROCESSING_TOOLKIT_TRANSLATION` is equivalent. See
-[Translations](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/TRANSLATIONS.md)
-for validation and partial-file behavior.
-
-## Verification and caching
-
-Every load verifies source filenames, byte sizes, and SHA-256 digests. Derived
-morphology has its own canonical digest. The first process load may create a local
-derived JSON cache; installed source files are never changed.
+An explicit, hash-verified downloader is also available:
 
 ```python
-quran = load_quran()                       # in-process and disk caching
-fresh = load_quran(cache=False)            # new object graph
-uncached = load_quran(disk_cache=False)    # rederive source records
+from quran_processing_toolkit import compare_verses, download_translation
+
+# This call opts into a network download on first use.
+translated = load_quran(translation=download_translation("en.qarai"))
+translated.require_translation()  # require coverage of all 6,236 verses
+
+changes = compare_verses(
+    quran.verse(27, 68),
+    quran.verse(23, 83),
+    ignore_pause_marks=True,
+)
+for change in changes:
+    print(change.kind, change.verse_a.address, change.verse_b.address)
 ```
 
-Use `QURAN_PROCESSING_TOOLKIT_CACHE` or `cache_dir=...` to relocate the disk cache.
-Read-only environments fall back safely to uncached loading. See
-[Architecture and performance](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/ARCHITECTURE.md).
+The catalog currently contains Ali Quli Qarai's English translation from Tanzil.
+Its terms specify non-commercial use unless permission is obtained from the
+translator or publisher. Downloads are cached outside the package and support
+`offline=True`. Missing translation output raises `TranslationNotAvailableError`.
+See [Translations](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/TRANSLATIONS.md)
+for terms, formats, coverage checks, and provenance.
+
+`compare_verses()` explains a single-word addition, substitution, or shift between
+two verses. It returns zero or one match, rather than a general similarity score.
+Its space-delimited surface positions differ from QAC word addresses; it performs
+no spelling or vowel normalization.
 
 ## Command line
 
@@ -209,31 +163,47 @@ quran-toolkit validate
 quran-rebuild --check
 ```
 
-See the [CLI reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/CLI.md)
-for every option.
+The [CLI reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/CLI.md)
+explains all commands, options, and exit behavior.
 
-## Documentation
+## Integrity and caching
+
+Every newly constructed corpus verifies source filenames, sizes, and SHA-256 hashes,
+plus the canonical derived morphology digest. Later equivalent `load_quran()` calls
+reuse the same in-process object. A local derived JSON cache speeds up new processes;
+installed source files are never changed.
+
+```python
+fresh = load_quran(cache=False)  # a new object graph
+uncached = load_quran(cache=False, disk_cache=False)  # rederive from source
+```
+
+Set `QURAN_PROCESSING_TOOLKIT_CACHE` or pass `cache_dir=...` to relocate the derived
+cache. Read-only cache locations fall back to uncached loading. See
+[Architecture](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/ARCHITECTURE.md).
+
+## Documentation for people and AI assistants
+
+Start at the [documentation index](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/README.md).
+The [AI usage guide](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/AI_GUIDE.md)
+provides a compact, executable introduction, task-to-API mapping, and common mistakes.
+[`llms.txt`](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/llms.txt)
+links to the authoritative Markdown references.
 
 - [Getting started](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/GETTING_STARTED.md)
 - [Query cookbook](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/QUERY_COOKBOOK.md)
 - [API reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/API_REFERENCE.md)
-- [Data model and indexing](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_MODEL.md)
 - [Morphology reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/MORPHOLOGY.md)
-- [Translations](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/TRANSLATIONS.md)
-- [Architecture and performance](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/ARCHITECTURE.md)
-- [Design review and roadmap](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/ROADMAP.md)
-- [Data provenance and licensing](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md)
-- [Source-preserving interpretation decisions](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/PROPOSED_CORPUS_CHANGES.md)
-- [Command-line reference](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/CLI.md)
-- [Release process](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/RELEASING.md)
+- [Release notes and preview migration](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/CHANGELOG.md)
+- [Runnable examples](https://github.com/mhpanju/QuranProcessingToolkit/tree/master/examples), including a [complete verb JSON exporter](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/examples/export_verb_index.py)
+- [Known limits and roadmap](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/ROADMAP.md)
 - [Contributing](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/CONTRIBUTING.md)
-
-Runnable programs for the motivating questions are in
-[`examples/`](https://github.com/mhpanju/QuranProcessingToolkit/tree/master/examples).
 
 ## Development
 
 ```bash
+python -m venv .venv
+. .venv/bin/activate
 python -m pip install -e packages/quran_processing_toolkit_qac_data
 python -m pip install -e ".[dev]"
 ruff check .
@@ -244,12 +214,15 @@ python -m quran_processing_toolkit.build --check
 python -m quran_processing_toolkit validate
 ```
 
-The historical `from tools import QuranCorpus` import remains available for old local
-scripts. New code should import from `quran_processing_toolkit`.
+The historical `from tools import QuranCorpus` import is available in source
+checkouts. Installed applications should import `quran_processing_toolkit`.
 
-## License
+## License and attribution
 
-The core Python distribution is Apache-2.0. The separate data distribution has mixed
-upstream terms and complete notices. No English translation is included. See
-[Data provenance](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md)
-for the exact file-level boundary.
+The Python code is Apache-2.0. The core also includes separately attributed Tanzil
+chapter-label metadata, whose upstream declaration is CC-BY without a version;
+see [Third-party notices](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/THIRD_PARTY_NOTICES.md).
+The data package preserves the QAC and Tanzil sources verbatim under their respective
+upstream terms, with full notices. No translation is bundled. Read
+[Data provenance and licensing](https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/DATA_PROVENANCE.md)
+before redistributing data or derived artifacts.

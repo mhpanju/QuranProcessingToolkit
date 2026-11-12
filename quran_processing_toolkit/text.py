@@ -25,6 +25,18 @@ class TranslationNotAvailableError(ValueError):
     """Raised when English output is requested without a translation for an item."""
 
 
+def split_surface_words(text: str, *, ignore_pause_marks: bool = False) -> tuple[str, ...]:
+    """Split at literal spaces, optionally deleting only known Quranic pause marks.
+
+    Empty fragments are omitted. No Unicode normalization, vowel removal, spelling
+    changes, or morphology-based contractions are applied. Tabs are not delimiters.
+    The original input is not modified; these are not QAC morphology word indices.
+    """
+    if ignore_pause_marks:
+        text = text.translate(QURANIC_PAUSE_TRANSLATION)
+    return tuple(part for part in text.split(" ") if part)
+
+
 def normalize_arabic(
     text: str,
     *,

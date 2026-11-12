@@ -251,6 +251,24 @@ class QuerySet(Generic[T]):
         value = voice.upper()
         return self.where(voice=aliases.get(value, value))
 
+    def with_nun_of_emphasis(self, present: bool = True) -> QuerySet[T]:
+        """Keep words or tokens with (or without) an annotated emphatic nun.
+
+        Pass False for absence. Non-verbs also lack an attached emphatic nun;
+        start with ``quran.verbs()`` when selecting only non-emphatic verbs.
+        """
+        if not isinstance(present, bool):
+            raise TypeError("present must be a bool")
+
+        def matches(item: Any) -> bool:
+            return bool(item.has_nun_of_emphasis()) == present
+
+        return self.filter(matches)
+
+    def without_nun_of_emphasis(self) -> QuerySet[T]:
+        """Keep words or tokens without an annotated emphatic nun."""
+        return self.with_nun_of_emphasis(False)
+
     def with_person(self, person: int) -> QuerySet[T]:
         """Keep inflected items with grammatical person 1, 2, or 3."""
         return self.where(person=person)
@@ -339,7 +357,13 @@ class QuerySet(Generic[T]):
 
     def most_common_forms(self, limit: int | None = None) -> tuple[tuple[str, int], ...]:
         """Rank individual verb-form codes, including words with multiple stems."""
-        counts = Counter(form for item in self for form in _values(item, "VERB_FORM"))
+        counts = Counter(
+            form
+            for item in self
+            for form in (
+                _values(item, "VERB_FORM") or _morphology_values(item, "forms", "verb_form")
+            )
+        )
         return tuple(counts.most_common(limit))
 
     def sorted_by(
