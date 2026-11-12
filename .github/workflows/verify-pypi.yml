@@ -1,0 +1,76 @@
+name: Verify production PyPI release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published core version to install and verify
+        required: true
+        default: "0.4.0"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_CHECKOUT: ${{ github.workspace }}
+      QURAN_PROCESSING_TOOLKIT_CACHE: ${{ runner.temp }}/qpt-pypi-cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: core-v${{ inputs.version }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install from production PyPI outside the checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/qpt-pypi"
+          "$RUNNER_TEMP/qpt-pypi/bin/python" -m pip install --no-cache-dir \
+            --index-url https://pypi.org/simple \
+            "quran-processing-toolkit[data]==${RELEASE_VERSION}"
+          "$RUNNER_TEMP/qpt-pypi/bin/python" -m pip check
+      - name: Verify the installed API and release documentation
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/qpt-pypi/bin/python" - <<'PYTHON'
+          import contextlib
+          import io
+          import os
+          import re
+          import tempfile
+          from importlib.metadata import version
+          from pathlib import Path
+          import quran_processing_toolkit as qpt
+
+          assert version("quran-processing-toolkit") == os.environ["RELEASE_VERSION"]
+          assert qpt.__version__ == os.environ["RELEASE_VERSION"]
+          assert "/site-packages/" in qpt.__file__
+          q = qpt.load_quran()
+          assert (len(q.chapters), len(q.verses), len(q.words), len(q.tokens)) == (114, 6236, 77429, 128219)
+          assert len(q.verbs()) == 19356
+          assert len(q.verbs().with_nun_of_emphasis()) == 243
+          assert q.chapter(2).name == "al-Baqarah"
+          assert q.search("muwsaY")
+          assert q.verbs().with_root("qwl").with_tense("past").with_voice("active")
+          assert qpt.compare_verses(q.verse(27, 68), q.verse(23, 83), ignore_pause_marks=True)
+          with tempfile.TemporaryDirectory() as directory:
+              path = Path(directory) / "translation.txt"
+              path.write_text("1|1|User-authored verification text\n", encoding="utf-8")
+              translated = qpt.load_quran(translation=path)
+              assert translated.verse(1, 1).get_translation() == "User-authored verification text"
+              assert translated.translation_coverage().translated == 1
+          for filename in ("README.md", "docs/AI_GUIDE.md"):
+              text = (Path(os.environ["RELEASE_CHECKOUT"]) / filename).read_text(encoding="utf-8")
+              example = re.search(r"```python\n(.*?)\n```", text, re.DOTALL).group(1)
+              with contextlib.redirect_stdout(io.StringIO()):
+                  exec(compile(example, filename, "exec"), {})
+          print("Production PyPI verification passed:", qpt.__file__)
+          print("Core:", qpt.__version__, "Data:", version("quran-processing-toolkit-qac-data"))
+          PYTHON
+          "$RUNNER_TEMP/qpt-pypi/bin/quran-toolkit" stats
+          "$RUNNER_TEMP/qpt-pypi/bin/quran-toolkit" validate
+          "$RUNNER_TEMP/qpt-pypi/bin/quran-rebuild" --check

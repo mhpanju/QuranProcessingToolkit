@@ -94,6 +94,12 @@ cd /tmp
 /tmp/qpt-pypi-smoke/bin/quran-rebuild --check
 ```
 
+The manual **Verify production PyPI release** (`verify-pypi.yml`) workflow repeats
+the public-index installation on a GitHub runner. Supply the published core version;
+it checks the installed API, release documentation examples, corpus validation, and
+deterministic rebuild outside the checkout. Use it when local network/DNS issues
+prevent a reliable download.
+
 Confirm installed versions, execute a morphology query, and check the project-page
 README and documentation links. Create GitHub release notes from `CHANGELOG.md`.
 
