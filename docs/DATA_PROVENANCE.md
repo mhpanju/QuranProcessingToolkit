@@ -5,8 +5,12 @@ different terms.
 
 ## Distribution boundary
 
-`quran-processing-toolkit` contains code only. It does not contain Quranic annotation,
-Quran text, or a translation.
+`quran-processing-toolkit` contains Apache-2.0 code and a small, separately attributed
+chapter-label/verse-count table. It does not contain Quranic annotation, Quran text,
+or a translation. Arabic/English chapter labels and counts are selected from Tanzil
+Metadata v1.0, whose source artifact declares `cc-by` without a version. This is
+identified separately as `LicenseRef-Tanzil-Metadata-CC-BY`, not relicensed as Apache.
+See [Third-party notices](../THIRD_PARTY_NOTICES.md) for the source hash and attribution.
 
 `quran-processing-toolkit-qac-data` contains the source files used by the loader. Its
 wheel includes complete upstream notices and accurately identifies its mixed terms;
@@ -58,6 +62,14 @@ translation to `load_quran(translation=...)`, subject to that translation's term
 The previously bundled Ali Quli Qarai translation was removed because Tanzil describes
 its translations as non-commercial unless separate permission is obtained:
 https://tanzil.net/trans/
+
+`download_translation("en.qarai")` now offers an explicit opt-in acquisition path
+from Tanzil to the user's cache. It does not bundle the translation or change its
+rights. The reviewed artifact covers 6,236 verses and is pinned to SHA-256
+`1207b98ee7ae47891b4dd01b608416da2278820acf54cdaf3943d0a6f9823fdf`.
+Verbatim bytes, terms/source links, author/language, hash, and retrieval timestamp
+are retained outside either distribution. No automatic updates or spelling repairs
+are applied. See [Translations](TRANSLATIONS.md) for complete behavior.
 
 ## Reproducibility
 

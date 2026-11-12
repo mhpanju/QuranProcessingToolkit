@@ -26,10 +26,20 @@ data, or a deliberate compatibility decision.
 
 ### Chapter metadata
 
-`Chapter` currently knows only its number and verses. Common programs would benefit
-from Arabic/transliterated names, Meccan/Medinan classification, and perhaps canonical
-English names. This requires choosing and licensing a trustworthy metadata source; it
-should not be hard-coded from memory.
+Chapter names in Arabic, ASCII transliteration, and English are now available, with
+sourced attribution and distribution notices. Verse counts are checked against the
+corpus in tests. Meccan/Medinan classification and revelation order remain future
+metadata additions rather than guessed fields.
+
+### Surface comparisons and explicit translation installation (available in 0.4.0)
+
+`surface_words()` and pairwise `compare_verses()` support exact space-delimited
+one-word edits, with explicit pause-mark policy and no spelling normalization.
+Corpus-wide verse-pair searches are kept in standalone client scripts rather than
+the package. `download_translation()` provides opt-in pinned acquisition from a
+curated catalog, while local TXT/JSON layers expose provenance and coverage checks.
+The first curated source is Qara'i from Tanzil. More sources require reviewed
+origins, terms, complete coverage, and pins; there is no arbitrary-URL downloader.
 
 ### More Quranic divisions
 

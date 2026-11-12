@@ -1,0 +1,15 @@
+Tanzil Quran Metadata v1.0
+Copyright (C) 2008-2009 Tanzil.info
+Source: https://tanzil.net/res/text/metadata/quran-data.xml
+Documentation: https://tanzil.net/docs/quran_metadata
+
+The source artifact declares license="cc-by" (Creative Commons Attribution),
+without specifying a version. The distribution identifies these metadata portions
+as LicenseRef-Tanzil-Metadata-CC-BY. It does not relicense them as Apache-2.0.
+
+The core chapter_names.py table selects Arabic and English chapter labels and
+canonical verse counts from this metadata. ASCII transliterations are the project's
+conventional labels. The complete upstream artifact is not included.
+
+Source SHA-256:
+8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a

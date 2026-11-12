@@ -13,11 +13,11 @@ never replaces or rewrites source data.
 ```python
 token = quran.token(2, 255, 1, 1)
 
-print(token.form)                 # Buckwalter surface segment
-print(token.tag)                  # QAC tag
+print(token.form)  # Buckwalter surface segment
+print(token.tag)  # QAC tag
 print(token.source_feature_text)  # exact complete source feature column
-print(token.source_features)      # non-keyed source features
-print(token.data)                 # copied complete processed record
+print(token.source_features)  # non-keyed source features
+print(token.data)  # copied complete processed record
 ```
 
 The source feature column contains both plain features and keyed features:
@@ -63,7 +63,28 @@ token.data["FEATURES"]
 For compatibility, `token.SOME_UPPERCASE_FIELD` also resolves against the processed
 record. Prefer `get()` when absence is expected.
 
+## Nun of emphasis
+
+```python
+verb = quran.token(2, 38, 6, 1)
+assert verb.has_nun_of_emphasis()
+assert quran.word(2, 38, 6).has_nun_of_emphasis()
+
+emphatic = quran.verbs().with_nun_of_emphasis()
+non_emphatic = quran.verbs().with_nun_of_emphasis(False)
+```
+
+QAC stores the nun as a separate `SUFFIX|+n:EMPH` segment. When building a word,
+the toolkit associates that suffix with the preceding verb stem, without crossing
+another stem. This avoids confusing emphatic lam prefixes or an ordinary final nun
+with nun of emphasis. In the currently supported corpus, 243 of 19,356 verb tokens
+match. Absence means the explicit annotation is absent, not a new linguistic judgment.
+Source records, tags, and the deterministic derived-record digest are unchanged.
+
 ## Word aggregation
+
+For stem-specific analysis use `quran.verbs()` or `quran.nouns()`, which return
+tokens. For whole-word analysis use `quran.verb_words` or `quran.noun_words`.
 
 A word aggregates distinct values from its stem tokens. These plural forms are always
 tuples:
@@ -93,25 +114,25 @@ The following word properties summarize stem fields:
 - `derived_noun`
 
 `grammatical_number` uses finite conjugation when available and otherwise falls back
-to nominal `COUNT`, so `quran.nouns.with_number("plural")` works naturally.
+to nominal `COUNT`, so `quran.noun_words.with_number("plural")` works naturally.
 
 ## Named morphology queries
 
 The same helpers work on compatible word or token collections:
 
 ```python
-quran.verbs.with_root("ktb")
-quran.verbs.with_lemma("...")
-quran.verbs.with_form("IV")
-quran.verbs.with_tense("present")
-quran.verbs.with_aspect("impf")
-quran.verbs.with_voice("pass")
-quran.verbs.with_person(1)
-quran.verbs.with_number("pl")
-quran.nouns.with_gender("f")
-quran.nouns.with_case("acc")
-quran.nouns.with_definiteness("indefinite")
-quran.nouns.with_derived_noun("verbal_noun")
+quran.verb_words.with_root("ktb")
+quran.verb_words.with_lemma("...")
+quran.verb_words.with_form("IV")
+quran.verb_words.with_tense("present")
+quran.verb_words.with_aspect("impf")
+quran.verb_words.with_voice("pass")
+quran.verb_words.with_person(1)
+quran.verb_words.with_number("pl")
+quran.noun_words.with_gender("f")
+quran.noun_words.with_case("acc")
+quran.noun_words.with_definiteness("indefinite")
+quran.noun_words.with_derived_noun("verbal_noun")
 quran.tokens.with_tag("V")
 quran.tokens.with_role("stem")
 quran.tokens.with_source_feature("IMPF")
@@ -174,10 +195,10 @@ explicit parenthesized form, the convenience model uses Form I. See
 ## Root-oriented helpers
 
 ```python
-quran.verbs.roots()
-quran.nouns.with_root_length(3)
-quran.nouns.with_minimum_root_letter_count("Awy", 2)
-quran.verbs.with_any_root({"ktb", "qwl"})
+quran.verb_words.roots()
+quran.noun_words.with_root_length(3)
+quran.noun_words.with_minimum_root_letter_count("Awy", 2)
+quran.verb_words.with_any_root({"ktb", "qwl"})
 ```
 
 Roots and lemmas are Buckwalter because that is how QAC stores them. The package does
@@ -189,7 +210,7 @@ Named methods are intentionally not exhaustive. `where()` can access lowercase p
 properties or raw uppercase processed-record keys:
 
 ```python
-quran.verbs.where(case="NOM", voice="ACTIVE")
+quran.verb_words.where(case="NOM", voice="ACTIVE")
 quran.tokens.where(POS="V", MOOD="SUBJ")
 ```
 

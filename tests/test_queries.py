@@ -49,33 +49,33 @@ class QueryTests(unittest.TestCase):
         self.assertGreater(len(automatic), 0)
 
     def test_morphology_queries(self) -> None:
-        present = self.quran.verbs.where(tense="PRESENT")
+        present = self.quran.verb_words.where(tense="PRESENT")
         self.assertGreater(len(present), 0)
         self.assertIn("I", present.count_by("baab"))
         self.assertEqual(present.where(baab="I").first().baab_name, "Thulathy Mujarrad")
-        first_plural = self.quran.verbs.where(person=1, grammatical_number="PLURAL")
+        first_plural = self.quran.verb_words.where(person=1, grammatical_number="PLURAL")
         self.assertGreater(len(first_plural), 0)
 
     def test_named_morphology_helpers(self) -> None:
-        present = self.quran.verbs.with_tense("PRES")
-        self.assertEqual(present.all(), self.quran.verbs.where(tense="PRESENT").all())
-        self.assertEqual(present.all(), self.quran.verbs.with_aspect("IMPF").all())
+        present = self.quran.verb_words.with_tense("PRES")
+        self.assertEqual(present.all(), self.quran.verb_words.where(tense="PRESENT").all())
+        self.assertEqual(present.all(), self.quran.verb_words.with_aspect("IMPF").all())
         self.assertEqual(len(present), 8330)
-        self.assertEqual(len(self.quran.verbs.with_aspect("PERF")), 9150)
-        self.assertEqual(len(self.quran.verbs.with_voice("PASS")), 1140)
+        self.assertEqual(len(self.quran.verb_words.with_aspect("PERF")), 9150)
+        self.assertEqual(len(self.quran.verb_words.with_voice("PASS")), 1140)
         self.assertEqual(present.with_form("I").first().get_form(), "I")
         self.assertEqual(present.most_common_forms()[0][0], "I")
 
-        plural = self.quran.verbs.with_person(1).with_number("PLURAL")
-        singular = self.quran.verbs.with_person(1).with_number("SINGULAR")
+        plural = self.quran.verb_words.with_person(1).with_number("PLURAL")
+        singular = self.quran.verb_words.with_person(1).with_number("SINGULAR")
         plural_only_roots = plural.roots() - singular.roots()
         self.assertTrue(plural_only_roots)
         self.assertTrue(plural.with_any_root(plural_only_roots))
 
-        weak = self.quran.nouns.with_root_length(3).with_minimum_root_letter_count("Awy", 2)
+        weak = self.quran.noun_words.with_root_length(3).with_minimum_root_letter_count("Awy", 2)
         self.assertGreater(len(weak), 0)
 
-        plural_nouns = self.quran.nouns.with_number("pl")
+        plural_nouns = self.quran.noun_words.with_number("pl")
         self.assertGreater(len(plural_nouns), 0)
         self.assertTrue(
             all(

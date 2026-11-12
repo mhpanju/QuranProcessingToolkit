@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import os
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -34,9 +34,51 @@ from .source_data import (
     load_normalized_records,
 )
 from .text import QURANIC_PAUSE_TRANSLATION
+from .translations import Translation, TranslationCoverage, load_translation
 
 _CACHE: dict[tuple[Any, ...], QuranCorpus] = {}
 _CACHE_LOCK = Lock()
+
+# QAC's nominal/particle families, with DET (the segmented article) included
+# among particles. INL (disconnected letters) is deliberately neither family.
+# https://corpus.quran.com/documentation/tagset.jsp
+_NOMINAL_TAGS = ("N", "PN", "ADJ", "IMPN", "PRON", "DEM", "REL", "T", "LOC")
+_PARTICLE_TAGS = (
+    "P",
+    "EMPH",
+    "IMPV",
+    "PRP",
+    "CONJ",
+    "SUB",
+    "ACC",
+    "AMD",
+    "ANS",
+    "AVR",
+    "CAUS",
+    "CERT",
+    "CIRC",
+    "COM",
+    "COND",
+    "EQ",
+    "EXH",
+    "EXL",
+    "EXP",
+    "FUT",
+    "INC",
+    "INT",
+    "INTG",
+    "NEG",
+    "PREV",
+    "PRO",
+    "REM",
+    "RES",
+    "RET",
+    "RSLT",
+    "SUP",
+    "SUR",
+    "VOC",
+    "DET",
+)
 
 CorpusError = DataError
 
@@ -46,8 +88,10 @@ class CorpusAlignmentError(DataError):
 
 
 def _resolve_translation_path(
-    translation: str | os.PathLike[str] | None,
+    translation: str | os.PathLike[str] | Translation | None,
 ) -> Path | None:
+    if isinstance(translation, Translation):
+        return translation.path
     configured = translation or os.environ.get("QURAN_PROCESSING_TOOLKIT_TRANSLATION")
     if configured is None:
         return None
@@ -110,6 +154,7 @@ class QuranCorpus:
     __slots__ = (
         "data_dir",
         "translation_path",
+        "translation",
         "chapters",
         "verses",
         "words",
@@ -118,6 +163,7 @@ class QuranCorpus:
         "_word_indexes",
         "_verbs",
         "_nouns",
+        "_token_selections",
         "_manifest",
         "_disk_cache",
         "_cache_dir",
@@ -127,7 +173,7 @@ class QuranCorpus:
         self,
         data_dir: str | os.PathLike[str] | None = None,
         *,
-        translation: str | os.PathLike[str] | None = None,
+        translation: str | os.PathLike[str] | Translation | None = None,
         disk_cache: bool = True,
         cache_dir: str | os.PathLike[str] | None = None,
     ) -> None:
@@ -135,11 +181,19 @@ class QuranCorpus:
             Path(data_dir).expanduser().resolve() if data_dir else default_data_directory()
         )
         self.translation_path = _resolve_translation_path(translation)
+        self.translation = (
+            translation
+            if isinstance(translation, Translation)
+            else load_translation(self.translation_path)
+            if self.translation_path
+            else None
+        )
         self._disk_cache = disk_cache
         self._cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else None
         self._word_indexes: dict[str, dict[Any, tuple[Word, ...]]] = {}
         self._verbs: QuerySet[Word] | None = None
         self._nouns: QuerySet[Word] | None = None
+        self._token_selections: dict[tuple[str, ...], QuerySet[Token]] = {}
         self._build()
 
     @classmethod
@@ -147,7 +201,7 @@ class QuranCorpus:
         cls,
         data_dir: str | os.PathLike[str] | None = None,
         *,
-        translation: str | os.PathLike[str] | None = None,
+        translation: str | os.PathLike[str] | Translation | None = None,
         cache: bool = True,
         disk_cache: bool = True,
         cache_dir: str | os.PathLike[str] | None = None,
@@ -167,13 +221,19 @@ class QuranCorpus:
         if translation_path:
             stat = translation_path.stat()
             translation_key = (translation_path, stat.st_size, stat.st_mtime_ns)
+            if isinstance(translation, Translation):
+                # Layer content AND attribution affect corpus identity. A raw path
+                # must not reuse a previously labeled downloaded Translation object.
+                translation_key += (translation.fingerprint,)
         # Loading options belong in the cache key. Otherwise a previous default load
         # could silently defeat a later request for a specific cache directory.
         key = (path, translation_key, disk_cache, resolved_cache_dir)
         if not cache:
             return cls(
                 path,
-                translation=translation_path,
+                translation=translation
+                if isinstance(translation, Translation)
+                else translation_path,
                 disk_cache=disk_cache,
                 cache_dir=resolved_cache_dir,
             )
@@ -182,7 +242,9 @@ class QuranCorpus:
             if corpus is None:
                 corpus = cls(
                     path,
-                    translation=translation_path,
+                    translation=translation
+                    if isinstance(translation, Translation)
+                    else translation_path,
                     disk_cache=disk_cache,
                     cache_dir=resolved_cache_dir,
                 )
@@ -197,7 +259,7 @@ class QuranCorpus:
         )
         sources = self._manifest["sources"]
         arabic = _read_numbered_text(self.data_dir / sources["arabic_text"]["filename"])
-        translations = _read_numbered_text(self.translation_path) if self.translation_path else {}
+        translations = self.translation.texts if self.translation else {}
 
         token_groups: defaultdict[tuple[int, int, int], list[Token]] = defaultdict(list)
         verse_addresses: defaultdict[tuple[int, int], list[tuple[int, int, int]]] = defaultdict(
@@ -251,7 +313,7 @@ class QuranCorpus:
                 verse_address,
                 verse_word_groups[verse_address],
                 verse_arabic,
-                translations.get(verse_address),
+                translations.get((verse_address.chapter, verse_address.verse)),
             )
             chapter_verse_groups[verse_address.chapter].append(verse)
             all_verses.append(verse)
@@ -290,18 +352,91 @@ class QuranCorpus:
         return OneBasedCollection(juzs)
 
     @property
-    def verbs(self) -> QuerySet[Word]:
+    def verb_words(self) -> QuerySet[Word]:
         """Return all words with at least one verb stem, computed lazily once."""
         if self._verbs is None:
             self._verbs = self.words.filter(Word.is_verb)
         return self._verbs
 
     @property
-    def nouns(self) -> QuerySet[Word]:
+    def noun_words(self) -> QuerySet[Word]:
         """Return all words with at least one noun stem, computed lazily once."""
         if self._nouns is None:
             self._nouns = self.words.filter(Word.is_noun)
         return self._nouns
+
+    def _tokens_with_tags(self, *tags: str) -> QuerySet[Token]:
+        """Cache each token selection lazily while preserving corpus order."""
+        if tags not in self._token_selections:
+            wanted = frozenset(tags)
+            self._token_selections[tags] = self.tokens.filter(lambda token: token.tag in wanted)
+        return self._token_selections[tags]
+
+    def verbs(self) -> QuerySet[Token]:
+        """Return verb tokens (V), equivalent to ``tokens.with_tag('V')``."""
+        return self._tokens_with_tags("V")
+
+    def nouns(self) -> QuerySet[Token]:
+        """Return noun tokens (N); use proper_nouns() for PN or nominals() for all."""
+        return self._tokens_with_tags("N")
+
+    def proper_nouns(self) -> QuerySet[Token]:
+        """Return proper-noun tokens (PN)."""
+        return self._tokens_with_tags("PN")
+
+    def adjectives(self) -> QuerySet[Token]:
+        """Return adjective tokens (ADJ)."""
+        return self._tokens_with_tags("ADJ")
+
+    def pronouns(self) -> QuerySet[Token]:
+        """Return personal, demonstrative, and relative pronouns (PRON, DEM, REL)."""
+        return self._tokens_with_tags("PRON", "DEM", "REL")
+
+    def adverbs(self) -> QuerySet[Token]:
+        """Return time and location adverb tokens (T, LOC)."""
+        return self._tokens_with_tags("T", "LOC")
+
+    def prepositions(self) -> QuerySet[Token]:
+        """Return preposition tokens (P), including attached prefixes."""
+        return self._tokens_with_tags("P")
+
+    def conjunctions(self) -> QuerySet[Token]:
+        """Return coordinating and subordinating conjunctions (CONJ, SUB)."""
+        return self._tokens_with_tags("CONJ", "SUB")
+
+    def nominals(self) -> QuerySet[Token]:
+        """Return the nominal family: N, PN, ADJ, IMPN, PRON, DEM, REL, T, LOC."""
+        return self._tokens_with_tags(*_NOMINAL_TAGS)
+
+    def particles(self) -> QuerySet[Token]:
+        """Return the QAC particle family plus DET; exclude disconnected letters.
+
+        Includes prepositions, conjunctions, lam prefixes, and emphatic suffixes,
+        not just independent words. See the API reference for the exact tag set.
+        """
+        return self._tokens_with_tags(*_PARTICLE_TAGS)
+
+    def translation_metadata(self) -> dict[str, str] | None:
+        """Return a copy of the supplied translation's provenance, or None."""
+        return dict(self.translation.metadata) if self.translation else None
+
+    def translation_coverage(self, verses: Iterable[Verse] | None = None) -> TranslationCoverage:
+        """Check translation coverage of all verses, or any iterable of Verse objects."""
+        addresses = {(v.chapter, v.verse) for v in (self.verses if verses is None else verses)}
+        available = self.translation.texts.keys() if self.translation else set()
+        missing = tuple(sorted(addresses - available))
+        return TranslationCoverage(len(addresses), len(addresses) - len(missing), missing)
+
+    def require_translation(self, verses: Iterable[Verse] | None = None) -> None:
+        """Raise TranslationNotAvailableError if any requested verse is untranslated."""
+        from .text import TranslationNotAvailableError
+
+        coverage = self.translation_coverage(verses)
+        if coverage.missing:
+            sample = ", ".join(f"{c}:{v}" for c, v in coverage.missing[:8])
+            raise TranslationNotAvailableError(
+                f"Translation missing for {len(coverage.missing)} verses: {sample}"
+            )
 
     def provenance(self) -> dict[str, Any]:
         """Return source versions, hashes, origins, and license identifiers."""
@@ -392,15 +527,15 @@ class QuranCorpus:
         raise ValueError("search() level must be 'verse' or 'word'")
 
     def stats(self) -> dict[str, int]:
-        """Return canonical object and linguistic subset counts."""
+        """Return canonical counts; legacy verbs/nouns entries count whole words."""
         return {
             "chapters": len(self.chapters),
             "verses": len(self.verses),
             "words": len(self.words),
             "tokens": len(self.tokens),
             "juzs": len(self.juzs),
-            "verbs": len(self.verbs),
-            "nouns": len(self.nouns),
+            "verbs": len(self.verb_words),
+            "nouns": len(self.noun_words),
         }
 
     def longest_word_sequence(
@@ -439,7 +574,7 @@ class QuranCorpus:
 def load_quran(
     data_dir: str | os.PathLike[str] | None = None,
     *,
-    translation: str | os.PathLike[str] | None = None,
+    translation: str | os.PathLike[str] | Translation | None = None,
     cache: bool = True,
     disk_cache: bool = True,
     cache_dir: str | os.PathLike[str] | None = None,
@@ -450,7 +585,8 @@ def load_quran(
         data_dir: Directory containing a supported source-data manifest and files.
             When omitted, discovery checks the environment override, installed data
             distribution, and finally the monorepo checkout.
-        translation: Optional ``chapter|verse|text`` UTF-8 file. The
+        translation: Optional numbered UTF-8/structured JSON file, or a Translation
+            returned by load_translation() or download_translation(). The
             ``QURAN_PROCESSING_TOOLKIT_TRANSLATION`` environment variable is used
             when this argument is omitted.
         cache: Reuse an equivalent :class:`QuranCorpus` in this process.

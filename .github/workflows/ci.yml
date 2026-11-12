@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -33,6 +37,8 @@ jobs:
       - run: python -m examples.search_and_scope
       - run: python -m examples.noun_morphology
       - run: python -m examples.inspect_annotation
+      - run: python -m examples.export_verb_index /tmp/verbs.json
+      - run: python -m examples.verse_word_frequency
       - run: python -m build --outdir dist/core
       - run: python -m build packages/quran_processing_toolkit_qac_data --outdir dist/data
       - run: twine check dist/core/* dist/data/*

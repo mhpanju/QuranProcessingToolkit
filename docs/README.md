@@ -4,6 +4,8 @@ Choose a starting point by task:
 
 | Goal | Document |
 |---|---|
+| Generate correct scripts with an AI assistant | [AI usage guide](AI_GUIDE.md) |
+| Review release changes or migrate from the preview | [Changelog](../CHANGELOG.md) |
 | Install and write a first query | [Getting started](GETTING_STARTED.md) |
 | Solve representative research questions | [Query cookbook](QUERY_COOKBOOK.md) |
 | Look up a class or method | [API reference](API_REFERENCE.md) |

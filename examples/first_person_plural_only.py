@@ -4,8 +4,8 @@ from quran_processing_toolkit import load_quran
 
 quran = load_quran()
 
-plural = quran.verbs.with_person(1).with_number("PLURAL")
-singular = quran.verbs.with_person(1).with_number("SINGULAR")
+plural = quran.verb_words.with_person(1).with_number("PLURAL")
+singular = quran.verb_words.with_person(1).with_number("SINGULAR")
 plural_only_roots = plural.roots() - singular.roots()
 
 print("Roots:", ", ".join(sorted(plural_only_roots)))

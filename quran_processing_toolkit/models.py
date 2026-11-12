@@ -12,8 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .chapter_names import chapter_name
 from .collections import OneBasedCollection, QuerySet
-from .text import TextMixin
+from .text import TextMixin, split_surface_words
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -83,10 +84,21 @@ class Token(TextMixin):
     properties such as :attr:`root`, :attr:`aspect`, and :attr:`case`.
     """
 
-    __slots__ = ("_data",)
+    __slots__ = ("_data", "_nun_of_emphasis")
 
     def __init__(self, data: dict[str, Any]) -> None:
         self._data = data
+        # Filled when Word assembles the segments; never added to source records.
+        self._nun_of_emphasis = False
+
+    def has_nun_of_emphasis(self) -> bool:
+        """Return whether this verb stem has an explicit ``+n:EMPH`` suffix.
+
+        The containing Word establishes suffix ownership during construction.
+        Other tokens (including the suffix itself) return False, as do standalone
+        tokens not yet assembled into a Word. This is not a spelling heuristic.
+        """
+        return self._nun_of_emphasis
 
     @property
     def address(self) -> TokenAddress:
@@ -317,6 +329,24 @@ class Word(TextMixin):
         self.tokens = OneBasedCollection(tokens)
         self._stem_tokens = tuple(token for token in tokens if token.role == "STEM")
         self.arabic_text = arabic_text
+        # A suffix belongs to the preceding stem, stopping at each new stem.
+        # EMPH also labels lam prefixes, so its tag alone is not sufficient.
+        stem: Token | None = None
+        for token in tokens:
+            if token.role == "STEM":
+                stem = token
+                stem._nun_of_emphasis = False
+            elif (
+                token.role == "SUFFIX"
+                and token.get("+n") == "EMPH"
+                and stem is not None
+                and stem.tag == "V"
+            ):
+                stem._nun_of_emphasis = True
+
+    def has_nun_of_emphasis(self) -> bool:
+        """Return whether any verb stem has an annotated nun-of-emphasis suffix."""
+        return any(token.has_nun_of_emphasis() for token in self._stem_tokens)
 
     @property
     def stem_tokens(self) -> QuerySet[Token]:
@@ -564,6 +594,14 @@ class Verse(TextMixin):
     def __repr__(self) -> str:
         return f"Verse({self.address}, {len(self.words)} words)"
 
+    def surface_words(self, *, ignore_pause_marks: bool = False) -> tuple[str, ...]:
+        """Return space-delimited Arabic segments, independently of QAC words."""
+        return split_surface_words(self.arabic_text, ignore_pause_marks=ignore_pause_marks)
+
+    def get_chapter_name(self, representation: str = "transliteration") -> str:
+        """Return this verse's chapter name in transliteration, Arabic, or English."""
+        return chapter_name(self.chapter, representation)
+
     @property
     def chapter(self) -> int:
         """Return the 1-based chapter number."""
@@ -598,6 +636,25 @@ class Chapter:
     def chapter(self) -> int:
         """Alias for the chapter's numeric address."""
         return self.number
+
+    @property
+    def name(self) -> str:
+        """Return the conventional ASCII transliterated chapter name."""
+        return self.get_name()
+
+    @property
+    def name_arabic(self) -> str:
+        """Return the Arabic chapter name (not verse text)."""
+        return self.get_name("arabic")
+
+    @property
+    def name_english(self) -> str:
+        """Return an English meaning of the chapter name, not a verse translation."""
+        return self.get_name("english")
+
+    def get_name(self, representation: str = "transliteration") -> str:
+        """Return the chapter name in transliteration, Arabic, or English."""
+        return chapter_name(self.number, representation)
 
     def __repr__(self) -> str:
         return f"Chapter({self.number}, {len(self.verses)} verses)"

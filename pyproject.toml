@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,8 @@ dynamic = ["version"]
 description = "Natural, queryable access to Quranic text and morphology"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
-license-files = ["LICENSE"]
+license = "Apache-2.0 AND LicenseRef-Tanzil-Metadata-CC-BY"
+license-files = ["LICENSE", "licenses/TANZIL-METADATA-NOTICE.txt"]
 authors = [{name = "Maysum Panju"}]
 dependencies = []
 keywords = ["quran", "arabic", "corpus", "morphology", "linguistics", "buckwalter"]
@@ -31,9 +31,10 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/mhpanju/QuranProcessingToolkit"
-Documentation = "https://github.com/mhpanju/QuranProcessingToolkit#readme"
+Documentation = "https://github.com/mhpanju/QuranProcessingToolkit/blob/master/docs/README.md"
 Repository = "https://github.com/mhpanju/QuranProcessingToolkit"
 Issues = "https://github.com/mhpanju/QuranProcessingToolkit/issues"
+Changelog = "https://github.com/mhpanju/QuranProcessingToolkit/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 fast = ["orjson>=3.10"]
